@@ -21,8 +21,8 @@ const App = () => (
         <Route path="/login" element={<LoginPage />} />
         <Route path="/edit" element={
           <ProtectedRoute>
-            {/* <YashTestEditingPage /> */}
-            <EditingPage/>
+            <YashTestEditingPage />
+            {/* <EditingPage/> */}
           </ProtectedRoute>
         } />
       </Routes>

@@ -12,12 +12,17 @@ def main(input_path):
     print("Extracting audio...")
     video = VideoFileClip(input_path)
     audio = video.audio
-    audio.write_audiofile(os.path.join(DIR, "input_audio.wav"))
+    if audio is not None:
+        audio.write_audiofile(os.path.join(DIR, "input_audio.wav"))
 
-    print("Reducing audio noise...")
-    y, sr = librosa.load(os.path.join(DIR, "input_audio.wav"), sr=None)
-    reduced_audio = nr.reduce_noise(y=y, sr=sr)
-    sf.write(os.path.join(DIR, "reduced_audio.wav"), reduced_audio, sr)
+        print("Reducing audio noise...")
+        y, sr = librosa.load(os.path.join(DIR, "input_audio.wav"), sr=None)
+        reduced_audio = nr.reduce_noise(y=y, sr=sr)
+        sf.write(os.path.join(DIR, "reduced_audio.wav"), reduced_audio, sr)
+        audio_available = True
+    else:
+        print("Warning: Input video has no audio track. Skipping audio extraction and noise reduction.")
+        audio_available = False
 
     # ---------------- STEP 2: Read and Denoise Video Frames ----------------
     print("Reading video frames...")
@@ -59,8 +64,11 @@ def main(input_path):
     # ---------------- STEP 4: Combine Denoised Video + Reduced Audio ----------------
     print("Merging reduced audio with video...")
     video = VideoFileClip(os.path.join(DIR, "denoised_video.mp4"))
-    audio = AudioFileClip(os.path.join(DIR, "reduced_audio.wav"))
-    final_video = video.with_audio(audio)
+    if audio_available:
+        audio = AudioFileClip(os.path.join(DIR, "reduced_audio.wav"))
+        final_video = video.with_audio(audio)
+    else:
+        final_video = video
     final_video.write_videofile(os.path.join(DIR, "output_final.mp4"), codec="libx264", audio_codec="aac")
     print("✅ Denoising complete. Final output: output_final.mp4")
 
