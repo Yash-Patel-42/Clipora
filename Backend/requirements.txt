@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+rembg
+Pillow
+tqdm
+numpy
+opencv-python
+librosa
+noisereduce
+soundfile
+moviepy
+onnxruntime
+python-multipart
