@@ -20,6 +20,10 @@ spec = importlib.util.spec_from_file_location('denoise_video', denoise_video_pat
 denoise_video = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(denoise_video)
 
+# Import caption generator
+sys.path.append(os.path.join(os.path.dirname(__file__), 'sniply_captions_generator'))
+from sniply_captions_generator import generate_captions
+
 app = FastAPI()
 
 # Allow CORS for frontend development
@@ -73,11 +77,20 @@ def process_noise_reduction(input_path, output_path):
     # Run the script (refactored as a function)
     try:
         denoise_video.main(input_file)
-    except Exception:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Noise reduction failed.")
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(tb)  # Always log the traceback
+        # Return the error message in the HTTP response for debugging
+        raise HTTPException(status_code=500, detail=f"Noise reduction failed: {str(e)}\n\n{tb}")
     # Move output_final.mp4 to output_path
     shutil.move(os.path.join(input_dir, 'output_final.mp4'), output_path)
+    return output_path
+
+@register_processor('caption_generator')
+def process_caption_generator(input_path, output_path):
+    result = generate_captions(input_path, output_path)
+    if result == 0 or result is None:
+        raise HTTPException(status_code=500, detail="Caption generation failed.")
     return output_path
 
 @app.post("/process/{processor_name}")
@@ -90,7 +103,8 @@ async def process_video(processor_name: str, file: UploadFile = File(...)):
     output_dir = os.path.join(RESULTS_DIR, process_id)
     os.makedirs(input_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
-    input_path = os.path.join(input_dir, file.filename)
+    # Use a consistent name to avoid conflicts with processor-specific names
+    input_path = os.path.join(input_dir, "original.mp4")
     output_path = os.path.join(output_dir, "output.mp4")
     with open(input_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -98,8 +112,10 @@ async def process_video(processor_name: str, file: UploadFile = File(...)):
     try:
         PROCESSORS[processor_name](input_path, output_path)
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+        # Improved error logging for all processors
+        tb = traceback.format_exc()
+        print(tb)
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}\n\n{tb}")
     # Return processed video
     return FileResponse(output_path, media_type="video/mp4", filename="output.mp4")
 
