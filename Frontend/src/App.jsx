@@ -4,9 +4,7 @@ import "./App.css"
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import LandingPage from './pages/Landing_Page';
-import EditingPage from './pages/Editing_Page';
 import NewEditingPage from './pages/New_Editing_Page';
-import YashTestEditingPage from './pages/Yash_Test_Editing_Page';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -18,13 +16,12 @@ const App = () => (
   <AuthProvider>
     <Router>
       <Routes>
-        {/* <Route path="/" element={<LandingPage />} /> */}
-        <Route path="/" element={<NewEditingPage />} />
+        <Route path="/" element={<LandingPage />} />
+        {/* <Route path="/" element={<NewEditingPage />} /> */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/edit" element={
           <ProtectedRoute>
-            <YashTestEditingPage />
-            {/* <EditingPage/> */}
+            <NewEditingPage />
           </ProtectedRoute>
         } />
       </Routes>

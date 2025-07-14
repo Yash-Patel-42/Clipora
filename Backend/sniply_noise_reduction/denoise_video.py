@@ -4,7 +4,7 @@ import numpy as np
 import librosa
 import noisereduce as nr
 import soundfile as sf
-from moviepy import VideoFileClip, AudioFileClip
+from moviepy.editor import VideoFileClip, AudioFileClip
 # FastDVDnet imports
 import torch
 from fastdvdnet.models import FastDVDnet
@@ -14,7 +14,7 @@ def print_progress(step, total_steps, description="Progress"):
     if total_steps == 0:
         return
     percent = int((step / total_steps) * 100)
-    print(f"{description}: {percent}% ({step}/{total_steps})", end='\\r')
+    print(f"{description}: {percent}% ({step}/{total_steps})", end='\r')
 
 def main(input_path):
     DIR = os.path.dirname(os.path.abspath(input_path))

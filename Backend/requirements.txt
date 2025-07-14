@@ -6,16 +6,16 @@ uvicorn
 python-multipart
 numpy==2.2.6
 Pillow
-tqdm==4.67.1
-packaging==25.0
+opencv-python
+moviepy==1.0.3
 requests==2.32.4
 urllib3==2.5.0
+scipy>=1.7.0
 
 # =====================
 # Background Removal dependencies
 # =====================
 rembg
-opencv-python
 
 # =====================
 # Noise Reduction dependencies
@@ -23,7 +23,6 @@ opencv-python
 librosa
 noisereduce
 soundfile
-moviepy
 torch
 torchvision
 torchaudio
@@ -57,3 +56,22 @@ resampy==0.4.3
 sympy==1.14.0
 tokenizers==0.21.2
 typing_extensions==4.14.0
+
+# =====================
+# Export and Transition dependencies
+# =====================
+# (moviepy is already included above)
+
+# =====================
+# AI Music Library dependencies
+# =====================
+mutagen>=1.45.1
+pathlib2>=2.3.7; python_version < "3.4"
+pydub>=0.25.1
+eyed3>=0.9.6
+tinytag>=1.5.0
+
+# =====================
+# Split, Manual Trim, Smart Trim, Text Apply
+# =====================
+# (All use moviepy, numpy, python-ffmpeg, pysubs2, already included above)

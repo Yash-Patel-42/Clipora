@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Toolbar = ({ onImport }) => {
+const Toolbar = ({ onImport, onExport, onTrim, onSplit, onTextOverlay }) => {
   return (
     <div className="h-14 bg-gray-900 border-b border-gray-800 px-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -39,6 +39,7 @@ const Toolbar = ({ onImport }) => {
         <button 
           className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
           title="Text"
+          onClick={onTextOverlay}
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
@@ -50,7 +51,7 @@ const Toolbar = ({ onImport }) => {
           title="Audio"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
           </svg>
         </button>
 
@@ -68,9 +69,22 @@ const Toolbar = ({ onImport }) => {
         <button 
           className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
           title="Split"
+          onClick={onSplit}
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243zm0 0L9.121 9.121" />
+          </svg>
+        </button>
+
+        <button 
+          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
+          title="Trim"
+          onClick={onTrim}
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="3" y1="9" x2="21" y2="9" />
+            <line x1="9" y1="21" x2="9" y2="9" />
           </svg>
         </button>
       </div>
