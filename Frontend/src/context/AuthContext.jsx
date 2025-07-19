@@ -9,13 +9,13 @@ import {
 } from "firebase/auth"
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDJBzJD2ctjDOQp4QZXDnoJeudOvlyVF1M",
-  authDomain: "login-page-abe50.firebaseapp.com",
-  projectId: "login-page-abe50",
-  storageBucket: "login-page-abe50.appspot.com",
-  messagingSenderId: "1095857304885",
-  appId: "1:1095857304885:web:d9446f2d9724ea3d26487c",
-  measurementId: "G-4NV43QKYLV",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
 
 const app = initializeApp(firebaseConfig)

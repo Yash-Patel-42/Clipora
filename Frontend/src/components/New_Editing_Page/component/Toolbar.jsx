@@ -1,124 +1,124 @@
 import React from 'react';
 
-const Toolbar = ({ onImport, onExport, onTrim, onSplit, onTextOverlay }) => {
+const ICONS = {
+  import: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+  ),
+  export: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+  ),
+  trim: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="9" y1="3" x2="9" y2="21" /></svg>
+  ),
+  split: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14" /></svg>
+  ),
+  text: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M4 20h16M4 4h16M12 4v16" /></svg>
+  ),
+  splitPlayhead: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 3v18M5 12h14" /></svg>
+  ),
+  trimStart: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M4 4v16M4 12h16" /></svg>
+  ),
+  trimEnd: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 4v16M4 12h16" /></svg>
+  ),
+  undo: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 14l-5-5 5-5M4 9h11a4 4 0 110 8h-1" /></svg>
+  ),
+  redo: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M15 10l5 5-5 5M20 15H9a4 4 0 110-8h1" /></svg>
+  ),
+};
+
+const Toolbar = ({ onImport, onExport, onTrim, onSplit, onTextOverlay, onSplitAtPlayhead, onTrimStartAtPlayhead, onTrimEndAtPlayhead, onUndo, onRedo, canUndo, canRedo }) => {
   return (
-    <div className="h-14 bg-gray-900 border-b border-gray-800 px-4 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          onClick={onImport}
-          title="Import Media"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-          </svg>
-        </button>
-
-        <div className="h-6 w-px bg-gray-800" />
-        
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Video"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-        </button>
-
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Image"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21" />
-          </svg>
-        </button>
-
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Text"
-          onClick={onTextOverlay}
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-          </svg>
-        </button>
-
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Audio"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-          </svg>
-        </button>
-
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Transitions"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-          </svg>
-        </button>
-
-        <div className="h-6 w-px bg-gray-800" />
-
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Split"
-          onClick={onSplit}
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243zm0 0L9.121 9.121" />
-          </svg>
-        </button>
-
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Trim"
-          onClick={onTrim}
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <line x1="3" y1="9" x2="21" y2="9" />
-            <line x1="9" y1="21" x2="9" y2="9" />
-          </svg>
-        </button>
-      </div>
-      
-      <div className="flex items-center gap-2">
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Undo"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 010 10H3" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10l6-6M3 10l6 6" />
-          </svg>
-        </button>
-
-        <button 
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-          title="Redo"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a5 5 0 000 10h10" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10l-6-6M21 10l-6 6" />
-          </svg>
-        </button>
-
-        <div className="h-6 w-px bg-gray-800" />
-
-        <button className="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors">
-          <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-          </svg>
-          Export
-        </button>
-      </div>
+    <div className="h-14 bg-gray-900 border-b border-gray-800 px-4 flex items-center gap-2">
+      <button
+        onClick={onUndo}
+        disabled={!canUndo}
+        className={`p-2 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 ${!canUndo ? 'text-gray-500' : 'text-white'}`}
+        title="Undo (Ctrl+Z)"
+        aria-label="Undo"
+      >
+        {ICONS.undo}
+      </button>
+      <button
+        onClick={onRedo}
+        disabled={!canRedo}
+        className={`p-2 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 ${!canRedo ? 'text-gray-500' : 'text-white'}`}
+        title="Redo (Ctrl+Y)"
+        aria-label="Redo"
+      >
+        {ICONS.redo}
+      </button>
+      <div className="w-px h-6 bg-gray-800 mx-2" />
+      <button
+        onClick={onImport}
+        className="p-2 rounded hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+        title="Import"
+        aria-label="Import"
+      >
+        {ICONS.import}
+      </button>
+      <button
+        onClick={onExport}
+        className="p-2 rounded hover:bg-green-700 text-white focus:outline-none focus:ring-2 focus:ring-green-400"
+        title="Export"
+        aria-label="Export"
+      >
+        {ICONS.export}
+      </button>
+      <button
+        onClick={onTrim}
+        className="p-2 rounded hover:bg-yellow-700 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+        title="Trim (Modal)"
+        aria-label="Trim"
+      >
+        {ICONS.trim}
+      </button>
+      <button
+        onClick={onSplit}
+        className="p-2 rounded hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+        title="Split (Modal)"
+        aria-label="Split"
+      >
+        {ICONS.split}
+      </button>
+      <button
+        onClick={onTextOverlay}
+        className="p-2 rounded hover:bg-pink-700 text-white focus:outline-none focus:ring-2 focus:ring-pink-400"
+        title="Text Overlay"
+        aria-label="Text Overlay"
+      >
+        {ICONS.text}
+      </button>
+      <button
+        onClick={onSplitAtPlayhead}
+        className="p-2 rounded hover:bg-indigo-700 text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        title="Split at Playhead"
+        aria-label="Split at Playhead"
+      >
+        {ICONS.splitPlayhead}
+      </button>
+      <button
+        onClick={onTrimStartAtPlayhead}
+        className="p-2 rounded hover:bg-orange-700 text-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+        title="Trim Start at Playhead"
+        aria-label="Trim Start at Playhead"
+      >
+        {ICONS.trimStart}
+      </button>
+      <button
+        onClick={onTrimEndAtPlayhead}
+        className="p-2 rounded hover:bg-red-700 text-white focus:outline-none focus:ring-2 focus:ring-red-400"
+        title="Trim End at Playhead"
+        aria-label="Trim End at Playhead"
+      >
+        {ICONS.trimEnd}
+      </button>
     </div>
   );
 };

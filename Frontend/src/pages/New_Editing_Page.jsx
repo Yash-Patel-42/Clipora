@@ -6,12 +6,29 @@ import VideoPreview from '../components/New_Editing_Page/component/VideoPreview'
 import ImportDialog from '../components/New_Editing_Page/component/ImportDialog';
 import { processTimeline } from '../components/New_Editing_Page/logic/ffmpegWorker';
 import TimelinePro from '../components/New_Editing_Page/component/TimelinePro';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+import KeyframePanel from '../components/New_Editing_Page/component/KeyframePanel';
+import { extractThumbnails } from '../components/New_Editing_Page/logic/utils';
+import { EXPORT_PRESETS } from '../components/New_Editing_Page/constants/exportPresets';
+import { TRANSITIONS } from '../components/New_Editing_Page/constants/transitions';
+import { BACKEND_URL } from '../components/New_Editing_Page/constants/backend';
+import TrimModal from '../components/New_Editing_Page/component/Modals/TrimModal';
+import SplitModal from '../components/New_Editing_Page/component/Modals/SplitModal';
+import TextOverlayModal from '../components/New_Editing_Page/component/Modals/TextOverlayModal';
+import AiMusicModal from '../components/New_Editing_Page/component/Modals/AiMusicModal';
+import ExportModal from '../components/New_Editing_Page/component/Modals/ExportModal';
+import ExportProgressModal from '../components/New_Editing_Page/component/Modals/ExportProgressModal';
+import AssetSidebar from '../components/New_Editing_Page/component/AssetSidebar';
+import TextPropertiesPanel from '../components/New_Editing_Page/component/TextPropertiesPanel';
 
 const NewEditingPage = () => {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [clips, setClips] = useState([]); // {id, file, url, start, end, duration}
+  // Refactor clips state to support multiple tracks per type
+  const [tracks, setTracks] = useState({
+    video: [[]], // array of video tracks, each is an array of clips
+    audio: [[]],
+    text: [[]],
+    image: [[]],
+  });
   const [selectedClip, setSelectedClip] = useState(null);
   const [outputUrl, setOutputUrl] = useState(null);
   const [processing, setProcessing] = useState(false);
@@ -38,43 +55,28 @@ const NewEditingPage = () => {
   const [selectedMusic, setSelectedMusic] = useState(null);
   const [musicVolume, setMusicVolume] = useState(0.3);
   const [aiMusicGenerating, setAiMusicGenerating] = useState(false);
+  // Add asset library state
+  const [assets, setAssets] = useState([]); // {id, file, url, name, type, duration, thumbnails}
 
-  // Helper: Extract thumbnails from a video file
-  const extractThumbnails = (file, duration, count = 20) => {
-    return new Promise((resolve) => {
-      const video = document.createElement('video');
-      video.preload = 'auto';
-      video.src = URL.createObjectURL(file);
-      video.crossOrigin = 'anonymous';
-      video.muted = true;
-      video.currentTime = 0;
-      const canvas = document.createElement('canvas');
-      const thumbnails = [];
-      let loaded = false;
-      video.addEventListener('loadeddata', async () => {
-        if (loaded) return;
-        loaded = true;
-        const interval = duration / count;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        for (let i = 0; i < count; i++) {
-          video.currentTime = Math.min(duration, i * interval);
-          await new Promise(res => {
-            video.onseeked = () => {
-              canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-              thumbnails.push(canvas.toDataURL('image/jpeg', 0.6));
-              res();
-            };
-          });
-        }
-        resolve(thumbnails);
-      });
-    });
+  // Undo/redo stacks
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+
+  // Add transition types
+  const [transitions, setTransitions] = useState([]); // {fromClipId, toClipId, type}
+
+  // Handler to add a transition between two clips
+  const handleAddTransition = (fromClipId, toClipId, type) => {
+    setTransitions(prev => [
+      ...prev.filter(t => !(t.fromClipId === fromClipId && t.toClipId === toClipId)),
+      { fromClipId, toClipId, type }
+    ]);
   };
 
   // Import handler
   const handleImport = async (files) => {
-    const newClips = await Promise.all(files.map(async (file, idx) => {
+    pushUndo();
+    const newAssets = await Promise.all(files.map(async (file, idx) => {
       const url = URL.createObjectURL(file);
       // Get video duration
       const video = document.createElement('video');
@@ -85,21 +87,32 @@ const NewEditingPage = () => {
       // Extract thumbnails
       const thumbnails = await extractThumbnails(file, duration, 20);
       return {
-        id: `clip-${Date.now()}-${idx}`,
+        id: `asset-${Date.now()}-${idx}`,
         file,
         url,
         name: file.name,
-        start: 0,
-        end: null, // null means till end
+        type: 'video',
         duration,
         thumbnails,
-        type: 'video',
       };
     }));
-    setClips(prev => [...prev, ...newClips]);
-    // Automatically select the first imported clip for preview
-    if (newClips.length > 0) {
-      setSelectedClip(newClips[0]);
+    setAssets(prev => [...prev, ...newAssets]);
+    // Optionally, auto-add to timeline as before
+    setTracks(prev => ({
+      ...prev,
+      video: [
+        [...prev.video[0], ...newAssets.map(asset => ({
+          ...asset,
+          id: `clip-${asset.id}`,
+          start: 0,
+          end: null,
+          trackIndex: 0,
+        }))],
+        ...prev.video.slice(1)
+      ]
+    }));
+    if (newAssets.length > 0) {
+      setSelectedClip({ ...newAssets[0], id: `clip-${newAssets[0].id}`, start: 0, end: null, trackIndex: 0 });
     }
   };
 
@@ -107,13 +120,13 @@ const NewEditingPage = () => {
   const handleExport = async () => {
     setProcessing(true);
     // Use the clips array as the timeline
-    const timeline = clips.map((clip, i) => ({
+    const timeline = tracks.video[0].map((clip, i) => ({
       id: `timeline-${clip.id}`,
       clipId: clip.id,
       start: clip.start || 0,
       end: clip.end,
     }));
-    const blob = await processTimeline(timeline, clips);
+    const blob = await processTimeline(timeline, tracks.video[0]);
     setOutputUrl(URL.createObjectURL(blob));
     setProcessing(false);
   };
@@ -204,7 +217,13 @@ const NewEditingPage = () => {
           type: 'video',
         };
         
-        setClips([processedClip]);
+        setTracks(prev => ({
+          ...prev,
+          video: [
+            [...prev.video[0], processedClip],
+            ...prev.video.slice(1)
+          ]
+        }));
         setSelectedClip(processedClip);
         setOutputUrl(url);
       } catch (err) {
@@ -252,7 +271,13 @@ const NewEditingPage = () => {
           thumbnails,
           type: 'video',
         };
-        setClips([processedClip]);
+        setTracks(prev => ({
+          ...prev,
+          video: [
+            [...prev.video[0], processedClip],
+            ...prev.video.slice(1)
+          ]
+        }));
         setSelectedClip(processedClip);
         setOutputUrl(url);
       } catch (err) {
@@ -300,7 +325,13 @@ const NewEditingPage = () => {
           thumbnails,
           type: 'video',
         };
-        setClips([processedClip]);
+        setTracks(prev => ({
+          ...prev,
+          video: [
+            [...prev.video[0], processedClip],
+            ...prev.video.slice(1)
+          ]
+        }));
         setSelectedClip(processedClip);
         setOutputUrl(url);
       } catch (err) {
@@ -400,7 +431,13 @@ const NewEditingPage = () => {
         thumbnails,
         type: 'video',
       };
-      setClips([processedClip]);
+      setTracks(prev => ({
+        ...prev,
+        video: [
+          [...prev.video[0], processedClip],
+          ...prev.video.slice(1)
+        ]
+      }));
       setSelectedClip(processedClip);
       setOutputUrl(url);
       setTrimModalOpen(false);
@@ -530,7 +567,13 @@ const NewEditingPage = () => {
         thumbnails,
         type: 'video',
       };
-      setClips([processedClip]);
+      setTracks(prev => ({
+        ...prev,
+        video: [
+          [...prev.video[0], processedClip],
+          ...prev.video.slice(1)
+        ]
+      }));
       setSelectedClip(processedClip);
       setOutputUrl(url);
       setTextModalOpen(false);
@@ -621,7 +664,13 @@ const NewEditingPage = () => {
         thumbnails,
         type: 'video',
       };
-      setClips([processedClip]);
+      setTracks(prev => ({
+        ...prev,
+        video: [
+          [...prev.video[0], processedClip],
+          ...prev.video.slice(1)
+        ]
+      }));
       setSelectedClip(processedClip);
       setOutputUrl(url);
       setAiMusicModalOpen(false);
@@ -683,233 +732,571 @@ const NewEditingPage = () => {
     setPlayhead(time);
   };
 
+  // Add new handlers for split and trim at playhead
+  const handleSplitAtPlayhead = () => {
+    if (!selectedClip) return;
+    const splitTime = playhead;
+    const clipStart = selectedClip.start || 0;
+    const clipEnd = selectedClip.end ?? selectedClip.duration;
+    if (splitTime <= clipStart || splitTime >= clipEnd) return;
+    const firstPart = { ...selectedClip, end: splitTime, id: selectedClip.id + '-1' };
+    const secondPart = { ...selectedClip, start: splitTime, id: selectedClip.id + '-2' };
+    setTracks(prev => ({
+      ...prev,
+      video: [
+        [...prev.video[0], firstPart, secondPart],
+        ...prev.video.slice(1)
+      ]
+    }));
+    setSelectedClip(secondPart);
+  };
+
+  const handleTrimStartAtPlayhead = () => {
+    if (!selectedClip) return;
+    const clipEnd = selectedClip.end ?? selectedClip.duration;
+    if (playhead < clipEnd) {
+      setTracks(prev => ({
+        ...prev,
+        video: [
+          [...prev.video[0], ...prev.video[0].map(c =>
+            c.id === selectedClip.id ? { ...c, start: playhead } : c
+          )],
+          ...prev.video.slice(1)
+        ]
+      }));
+    }
+  };
+
+  const handleTrimEndAtPlayhead = () => {
+    if (!selectedClip) return;
+    const clipStart = selectedClip.start || 0;
+    if (playhead > clipStart) {
+      setTracks(prev => ({
+        ...prev,
+        video: [
+          [...prev.video[0], ...prev.video[0].map(c =>
+            c.id === selectedClip.id ? { ...c, end: playhead } : c
+          )],
+          ...prev.video.slice(1)
+        ]
+      }));
+    }
+  };
+
+  // Handler for updating a clip (move/resize/track change)
+  const handleClipUpdate = (updatedClip) => {
+    pushUndo();
+    setTracks(prev => {
+      const type = updatedClip.type || 'video';
+      const oldTrackIndex = selectedClip?.trackIndex ?? 0;
+      const newTrackIndex = updatedClip.trackIndex ?? 0;
+      // Remove from old track
+      let newTracks = { ...prev };
+      newTracks[type] = newTracks[type].map((track, idx) =>
+        idx === oldTrackIndex ? track.filter(c => c.id !== updatedClip.id) : track
+      );
+      // Add to new track (create if needed)
+      while (newTracks[type].length <= newTrackIndex) {
+        newTracks[type].push([]);
+      }
+      newTracks[type][newTrackIndex] = [...newTracks[type][newTrackIndex], updatedClip];
+      return newTracks;
+    });
+    setSelectedClip(updatedClip);
+  };
+
+  // Handler to add asset to timeline (drag from library)
+  const handleAddAssetToTimeline = (asset, start = 0, trackType = 'video', trackIndex = 0) => {
+    pushUndo();
+    setTracks(prev => {
+      let newTracks = { ...prev };
+      while (newTracks[trackType].length <= trackIndex) {
+        newTracks[trackType].push([]);
+      }
+      newTracks[trackType][trackIndex] = [
+        ...newTracks[trackType][trackIndex],
+        {
+          ...asset,
+          id: `clip-${asset.id}-${Date.now()}`,
+          start,
+          end: asset.duration ? Math.min(asset.duration, start + asset.duration) : null,
+          trackIndex,
+        }
+      ];
+      return newTracks;
+    });
+  };
+
+  // Add text asset import handler (for demo, allow adding a text asset)
+  const handleAddTextAsset = (text = 'Sample Text') => {
+    const asset = {
+      id: `asset-text-${Date.now()}`,
+      type: 'text',
+      name: text,
+      text,
+      font: 'Arial',
+      fontSize: 32,
+      color: '#ffffff',
+      alignment: 'center',
+      shadow: false,
+      outline: false,
+      duration: 5,
+    };
+    setAssets(prev => [...prev, asset]);
+    // Optionally, add to timeline
+    setTracks(prev => ({
+      ...prev,
+      text: [
+        [...(prev.text[0] || []), {
+          ...asset,
+          id: `clip-${asset.id}`,
+          start: 0,
+          end: 5,
+          trackIndex: 0,
+        }],
+        ...prev.text.slice(1)
+      ]
+    }));
+  };
+
+  // Text property editing panel
+  const handleUpdateTextClip = updatedProps => {
+    setTracks(prev => {
+      const trackIndex = selectedClip?.trackIndex ?? 0;
+      return {
+        ...prev,
+        text: prev.text.map((track, idx) =>
+          idx === trackIndex
+            ? track.map(c => c.id === selectedClip.id ? { ...c, ...updatedProps } : c)
+            : track
+        )
+      };
+    });
+    setSelectedClip(clip => clip ? { ...clip, ...updatedProps } : clip);
+  };
+
+  // Handler to delete a clip
+  const handleDeleteClip = (clip) => {
+    pushUndo();
+    setTracks(prev => {
+      const type = clip.type || 'video';
+      const trackIndex = clip.trackIndex ?? 0;
+      return {
+        ...prev,
+        [type]: prev[type].map((track, idx) =>
+          idx === trackIndex ? track.filter(c => c.id !== clip.id) : track
+        )
+      };
+    });
+    if (selectedClip && selectedClip.id === clip.id) setSelectedClip(null);
+  };
+  // Handler to duplicate a clip
+  const handleDuplicateClip = (clip) => {
+    pushUndo();
+    setTracks(prev => {
+      const type = clip.type || 'video';
+      const trackIndex = clip.trackIndex ?? 0;
+      const newClip = { ...clip, id: `clip-${clip.id}-copy-${Date.now()}`, start: (clip.end || clip.start + 1), end: (clip.end || clip.start + 1) + ((clip.end || clip.duration || 1) - (clip.start || 0)), trackIndex };
+      return {
+        ...prev,
+        [type]: prev[type].map((track, idx) =>
+          idx === trackIndex ? [...track, newClip] : track
+        )
+      };
+    });
+  };
+  // Handler for context menu actions
+  const handleClipContextAction = (action, clip) => {
+    if (action === 'delete') handleDeleteClip(clip);
+    else if (action === 'duplicate') handleDuplicateClip(clip);
+    else if (action === 'properties') {
+      setSelectedClip(clip);
+      // Optionally scroll to clip or open a properties modal
+    }
+  };
+
+  // Helper to push current state to undo stack
+  const pushUndo = () => {
+    setUndoStack(stack => [
+      { tracks: JSON.parse(JSON.stringify(tracks)), selectedClip, assets: JSON.parse(JSON.stringify(assets)) },
+      ...stack
+    ]);
+    setRedoStack([]); // Clear redo on new action
+  };
+
+  // Undo handler
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[0];
+    setRedoStack(stack => [
+      { tracks: JSON.parse(JSON.stringify(tracks)), selectedClip, assets: JSON.parse(JSON.stringify(assets)) },
+      ...stack
+    ]);
+    setTracks(prev.tracks);
+    setSelectedClip(prev.selectedClip);
+    setAssets(prev.assets);
+    setUndoStack(stack => stack.slice(1));
+  };
+
+  // Redo handler
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[0];
+    setUndoStack(stack => [
+      { tracks: JSON.parse(JSON.stringify(tracks)), selectedClip, assets: JSON.parse(JSON.stringify(assets)) },
+      ...stack
+    ]);
+    setTracks(next.tracks);
+    setSelectedClip(next.selectedClip);
+    setAssets(next.assets);
+    setRedoStack(stack => stack.slice(1));
+  };
+
+  // Project Save
+  const handleSaveProject = () => {
+    const data = {
+      tracks,
+      assets,
+      selectedClip,
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sniply_project.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  };
+
+  // Project Load
+  const handleLoadProject = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        if (data.tracks && data.assets) {
+          setTracks(data.tracks);
+          setAssets(data.assets);
+          setSelectedClip(data.selectedClip || null);
+        } else {
+          alert('Invalid project file.');
+        }
+      } catch (err) {
+        alert('Failed to load project: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  const fileInputRef = useRef();
+
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportSettings, setExportSettings] = useState({
+    resolution: '1920x1080',
+    aspect: '16:9',
+    format: 'mp4',
+    preset: 'YouTube (1080p, 16:9)',
+  });
+
+  // Show export modal on export
+  const handleExportClick = () => setExportModalOpen(true);
+
+  // Export progress state
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportPreviewUrl, setExportPreviewUrl] = useState(null);
+
+  // Update export handler to show progress and preview
+  const handleExportWithSettings = async () => {
+    setExportModalOpen(false);
+    setProcessing(true);
+    setExportProgress(0);
+    setExportPreviewUrl(null);
+    // Simulate export progress
+    for (let i = 1; i <= 10; i++) {
+      await new Promise(res => setTimeout(res, 200));
+      setExportProgress(i * 10);
+    }
+    // Simulate export preview (use outputUrl or a placeholder)
+    setExportPreviewUrl(outputUrl || null);
+    setProcessing(false);
+  };
+
+  // Multi-select state
+  const [selectedClips, setSelectedClips] = useState([]); // array of clip ids
+
+  // Update single selection logic to use selectedClips
+  const handleSelectClip = (clip, e) => {
+    if (e && (e.ctrlKey || e.metaKey)) {
+      // Toggle selection
+      setSelectedClips(prev => prev.includes(clip.id) ? prev.filter(id => id !== clip.id) : [...prev, clip.id]);
+      setSelectedClip(clip); // for property panel
+    } else if (e && e.shiftKey && selectedClips.length > 0) {
+      // Range select (same track)
+      const type = clip.type || 'video';
+      const trackIndex = clip.trackIndex ?? 0;
+      const track = tracks[type][trackIndex];
+      const lastSelected = track.findIndex(c => c.id === selectedClips[selectedClips.length - 1]);
+      const thisIdx = track.findIndex(c => c.id === clip.id);
+      if (lastSelected !== -1 && thisIdx !== -1) {
+        const [start, end] = [lastSelected, thisIdx].sort((a, b) => a - b);
+        const rangeIds = track.slice(start, end + 1).map(c => c.id);
+        setSelectedClips(prev => Array.from(new Set([...prev, ...rangeIds])));
+        setSelectedClip(clip);
+      }
+    } else {
+      setSelectedClips([clip.id]);
+      setSelectedClip(clip);
+    }
+  };
+
+  // Group move/trim logic (for now, just move all selected clips by the same delta)
+  const handleGroupClipUpdate = (updatedClip, deltaStart) => {
+    pushUndo();
+    setTracks(prev => {
+      const type = updatedClip.type || 'video';
+      const trackIndex = updatedClip.trackIndex ?? 0;
+      return {
+        ...prev,
+        [type]: prev[type].map((track, idx) =>
+          idx === trackIndex
+            ? track.map(c => selectedClips.includes(c.id)
+              ? { ...c, start: c.start + deltaStart, end: c.end ? c.end + deltaStart : null }
+              : c)
+            : track
+        )
+      };
+    });
+  };
+
+  // Update TimelinePro usage
   return (
-    <div className="h-screen bg-gray-900">
-      <PanelGroup direction="horizontal">
-        <Panel defaultSize={20} minSize={15} maxSize={30}>
-          <Sidebar onToolClick={handleToolClick} processing={processing} />
-        </Panel>
-        <PanelResizeHandle className="bg-gray-700 w-1 cursor-col-resize" />
-        <Panel minSize={40}>
-          <div className="flex flex-col h-full w-full">
-            <Toolbar onImport={() => setImportDialogOpen(true)} onExport={handleExport} onTrim={handleTrim} onSplit={handleSplit} onTextOverlay={handleTextOverlay} />
-            {/* Zoom controls */}
-            <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
-              <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} className="px-2 py-1 bg-gray-700 rounded text-white">-</button>
-              <span className="text-white">Zoom: {zoom.toFixed(2)}x</span>
-              <button onClick={() => setZoom(z => Math.min(4, z + 0.25))} className="px-2 py-1 bg-gray-700 rounded text-white">+</button>
-            </div>
-            <PanelGroup direction="vertical">
-              <Panel defaultSize={40} minSize={20} maxSize={60}>
-                <VideoPreview
-                  videoUrl={outputUrl || (selectedClip && selectedClip.url)}
-                  onTimeUpdate={handleVideoTimeUpdate}
-                  seekTo={seekTo}
-                />
-              </Panel>
-              <PanelResizeHandle className="bg-gray-700 h-1 cursor-row-resize" />
-              <Panel minSize={20}>
-                <TimelinePro
-                  playhead={playhead}
-                  duration={videoDuration}
-                  onSeek={handleTimelineSeek}
-                  clips={clips}
-                  zoom={zoom}
-          />
-              </Panel>
-            </PanelGroup>
-      <ImportDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        onImport={handleImport}
-      />
-          </div>
-        </Panel>
-      </PanelGroup>
-      {/* Trim Modal */}
-      {trimModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded shadow-lg">
-            <h2 className="text-lg font-bold mb-2">Trim Video</h2>
-            <div className="mb-2 text-gray-700 text-sm">Video duration: {selectedClip?.duration ? selectedClip.duration.toFixed(2) : 'Loading...'} seconds</div>
-            <label className="block mb-2">Start Time (seconds):
-              <input type="number" min="0" max={selectedClip?.duration || 0} value={trimStart} onChange={e => {
-                const value = Number(e.target.value);
-                setTrimStart(value);
-                // If end is less than or equal to new start, auto-adjust end
-                if (trimEnd <= value) setTrimEnd(Math.min((selectedClip?.duration || 0), value + 0.1));
-              }} className="ml-2 border rounded px-2 py-1" />
-            </label>
-            <label className="block mb-4">End Time (seconds):
-              <input type="number" min={trimStart + 0.1} max={selectedClip?.duration || 0} value={trimEnd} onChange={e => setTrimEnd(Number(e.target.value))} className="ml-2 border rounded px-2 py-1" />
-            </label>
-            {(trimEnd <= trimStart) && (
-              <div className="text-red-600 mb-2">End time must be greater than start time.</div>
-            )}
-            <div className="mt-4 flex gap-2">
-              <button onClick={handleTrimConfirm} className={`bg-blue-600 text-white px-4 py-2 rounded ${(trimEnd <= trimStart || !selectedClip?.duration || selectedClip.duration <= 0) ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={trimEnd <= trimStart || !selectedClip?.duration || selectedClip.duration <= 0}>Trim</button>
-              <button onClick={() => setTrimModalOpen(false)} className="bg-gray-300 px-4 py-2 rounded">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Split Modal */}
-      {splitModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded shadow-lg">
-            <h2 className="text-lg font-bold mb-2">Split Video</h2>
-            <div className="mb-2 text-gray-700 text-sm">Video duration: {selectedClip?.duration ? selectedClip.duration.toFixed(2) : 'Loading...'} seconds</div>
-            <label className="block mb-4">Split Time (seconds):
-              <input type="number" min="1" max={selectedClip?.duration - 1 || 1} value={splitTime} onChange={e => setSplitTime(Number(e.target.value))} className="ml-2 border rounded px-2 py-1" />
-            </label>
-            {(splitTime <= 0 || splitTime >= selectedClip?.duration) && (
-              <div className="text-red-600 mb-2">Split time must be between 1 and video duration - 1.</div>
-            )}
-            <div className="mt-4 flex gap-2">
-              <button onClick={handleSplitConfirm} className={`bg-blue-600 text-white px-4 py-2 rounded ${(splitTime <= 0 || splitTime >= selectedClip?.duration) ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={splitTime <= 0 || splitTime >= selectedClip?.duration}>Split</button>
-              <button onClick={() => setSplitModalOpen(false)} className="bg-gray-300 px-4 py-2 rounded">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Text Overlay Modal */}
-      {textModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded shadow-lg w-96">
-            <h2 className="text-lg font-bold mb-2">Add Text Overlay</h2>
-            <div className="mb-2 text-gray-700 text-sm">Video duration: {selectedClip?.duration ? selectedClip.duration.toFixed(2) : 'Loading...'} seconds</div>
-            <label className="block mb-2">Text:
-              <input type="text" value={overlayText} onChange={e => setOverlayText(e.target.value)} className="ml-2 border rounded px-2 py-1 w-full" />
-            </label>
-            <label className="block mb-2">Start Time (seconds):
-              <input type="number" min="0" max={selectedClip?.duration || 0} value={textStart} onChange={e => setTextStart(Number(e.target.value))} className="ml-2 border rounded px-2 py-1" />
-            </label>
-            <label className="block mb-2">End Time (seconds):
-              <input type="number" min={textStart + 0.1} max={selectedClip?.duration || 0} value={textEnd} onChange={e => setTextEnd(Number(e.target.value))} className="ml-2 border rounded px-2 py-1" />
-            </label>
-            <label className="block mb-2">Font Size:
-              <input type="number" min="8" max="128" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="ml-2 border rounded px-2 py-1 w-20" />
-            </label>
-            <label className="block mb-2">Font Color:
-              <input type="color" value={fontColor} onChange={e => setFontColor(e.target.value)} className="ml-2 border rounded px-2 py-1 w-10 h-8 align-middle" />
-            </label>
-            <label className="block mb-4">Alignment:
-              <select value={textAlignment} onChange={e => setTextAlignment(Number(e.target.value))} className="ml-2 border rounded px-2 py-1">
-                <option value={2}>Bottom Center</option>
-                <option value={8}>Top Center</option>
-                <option value={5}>Middle Center</option>
-                <option value={1}>Bottom Left</option>
-                <option value={3}>Bottom Right</option>
-                <option value={4}>Middle Left</option>
-                <option value={6}>Middle Right</option>
-                <option value={7}>Top Left</option>
-                <option value={9}>Top Right</option>
-              </select>
-            </label>
-            {(overlayText.trim() === '' || textEnd <= textStart) && (
-              <div className="text-red-600 mb-2">Text is required and end time must be greater than start time.</div>
-            )}
-            <div className="mt-4 flex gap-2">
-              <button onClick={handleTextOverlayConfirm} className={`bg-blue-600 text-white px-4 py-2 rounded ${(overlayText.trim() === '' || textEnd <= textStart) ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={overlayText.trim() === '' || textEnd <= textStart}>Apply</button>
-              <button onClick={() => setTextModalOpen(false)} className="bg-gray-300 px-4 py-2 rounded">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* AI Music Modal */}
-      {aiMusicModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded shadow-lg w-[600px] max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4">AI Music</h2>
-            
-            {/* Video Mood Analysis */}
-            {videoMood && (
-              <div className="mb-4 p-3 bg-blue-50 rounded">
-                <h3 className="font-semibold mb-2">Video Analysis</h3>
-                <p>Detected Mood: <span className="font-bold text-blue-600">{videoMood.mood}</span></p>
-                <p>Confidence: <span className="font-bold">{videoMood.confidence * 100}%</span></p>
-                <p>Duration: <span className="font-bold">{videoMood.duration}s</span></p>
+    <div className="h-screen bg-gray-900 flex flex-row min-w-0">
+      {/* Asset Library Sidebar - always visible on the left */}
+      <div className="flex-shrink-0 w-56 bg-gray-800 border-r border-gray-700 min-h-0">
+        <AssetSidebar
+          assets={assets}
+          onAssetDragStart={(e, asset) => {
+            e.dataTransfer.setData('assetId', asset.id);
+          }}
+          onSaveProject={handleSaveProject}
+          onLoadProject={() => fileInputRef.current && fileInputRef.current.click()}
+          fileInputRef={fileInputRef}
+          onAddTextAsset={() => handleAddTextAsset('New Text Overlay')}
+          TRANSITIONS={TRANSITIONS}
+          onTransitionDragStart={(e, tr) => {
+            e.dataTransfer.setData('transitionType', tr.type);
+          }}
+        />
+      </div>
+      {/* Main Editor Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <PanelGroup direction="horizontal">
+          <Panel defaultSize={20} minSize={15} maxSize={30}>
+            <Sidebar onToolClick={handleToolClick} processing={processing} />
+          </Panel>
+          <PanelResizeHandle className="bg-gray-700 w-1 cursor-col-resize" />
+          <Panel minSize={40}>
+            <div className="flex flex-col h-full w-full">
+              <Toolbar
+                onImport={() => setImportDialogOpen(true)}
+                onExport={handleExportClick}
+                onTrim={handleTrim}
+                onSplit={handleSplit}
+                onTextOverlay={handleTextOverlay}
+                onSplitAtPlayhead={handleSplitAtPlayhead}
+                onTrimStartAtPlayhead={handleTrimStartAtPlayhead}
+                onTrimEndAtPlayhead={handleTrimEndAtPlayhead}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                canUndo={undoStack.length > 0}
+                canRedo={redoStack.length > 0}
+              />
+              {/* Zoom controls */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
+                <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} className="px-2 py-1 bg-gray-700 rounded text-white">-</button>
+                <span className="text-white">Zoom: {zoom.toFixed(2)}x</span>
+                <button onClick={() => setZoom(z => Math.min(4, z + 0.25))} className="px-2 py-1 bg-gray-700 rounded text-white">+</button>
               </div>
-            )}
-            
-            {/* Music Options */}
-            <div className="mb-4">
-              <h3 className="font-semibold mb-2">Choose Music Option:</h3>
-              
-              {/* AI Music Generation */}
-              <div className="mb-3 p-3 border rounded">
-                <h4 className="font-medium mb-2">🎵 Generate AI Music</h4>
-                <p className="text-sm text-gray-600 mb-2">Create custom music based on your video's mood</p>
-                <button 
-                  onClick={handleGenerateAiMusic}
-                  disabled={aiMusicGenerating || !videoMood}
-                  className="bg-purple-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
-                >
-                  {aiMusicGenerating ? 'Generating...' : 'Generate AI Music'}
-                </button>
-              </div>
-              
-              {/* Music Library */}
-              {videoMood && musicLibrary[videoMood.mood] && (
-                <div className="mb-3 p-3 border rounded">
-                  <h4 className="font-medium mb-2">📚 Music Library</h4>
-                  <p className="text-sm text-gray-600 mb-2">Choose from curated tracks for {videoMood.mood} mood</p>
-                  <div className="space-y-2">
-                    {musicLibrary[videoMood.mood].map((track) => (
-                      <div 
-                        key={track.id}
-                        className={`p-2 border rounded cursor-pointer ${selectedMusic?.id === track.id ? 'bg-blue-100 border-blue-300' : 'hover:bg-gray-50'}`}
-                        onClick={() => setSelectedMusic(track)}
-                      >
-                        <div className="font-medium">{track.name}</div>
-                        <div className="text-sm text-gray-600">{track.duration}s</div>
-                      </div>
-                    ))}
+              <PanelGroup direction="vertical">
+                <Panel defaultSize={40} minSize={20} maxSize={60}>
+                  <VideoPreview
+                    videoUrl={outputUrl || (selectedClip && selectedClip.url)}
+                    onTimeUpdate={handleVideoTimeUpdate}
+                    seekTo={seekTo}
+                  />
+                </Panel>
+                <PanelResizeHandle className="bg-gray-700 h-1 cursor-row-resize" />
+                <Panel minSize={20}>
+                  {/* TimelinePro drop handler for assets and transitions */}
+                  <div
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      const assetId = e.dataTransfer.getData('assetId');
+                      const transitionType = e.dataTransfer.getData('transitionType');
+                      if (assetId) {
+                        const asset = assets.find(a => a.id === assetId);
+                        if (asset) {
+                          // For now, add to first track at playhead
+                          handleAddAssetToTimeline(asset, playhead, asset.type, 0);
+                        }
+                      } else if (transitionType) {
+                        // Find the two adjacent clips at the drop position
+                        // For simplicity, use the first video track
+                        const videoClips = tracks.video[0].slice().sort((a, b) => (a.start || 0) - (b.start || 0));
+                        const dropX = e.nativeEvent.offsetX;
+                        const PIXELS_PER_SECOND = 100 * zoom;
+                        const dropTime = dropX / PIXELS_PER_SECOND;
+                        for (let i = 0; i < videoClips.length - 1; i++) {
+                          const a = videoClips[i];
+                          const b = videoClips[i + 1];
+                          if ((a.end ?? a.duration) <= dropTime && b.start >= dropTime) {
+                            handleAddTransition(a.id, b.id, transitionType);
+                            break;
+                          }
+                        }
+                      }
+                    }}
+                    className="h-full w-full"
+                  >
+                    <TimelinePro
+                      playhead={playhead}
+                      duration={videoDuration}
+                      onSeek={handleTimelineSeek}
+                      tracks={tracks}
+                      zoom={zoom}
+                      selectedClip={selectedClip}
+                      selectedClips={selectedClips}
+                      onSelectClip={handleSelectClip}
+                      onSelectClips={setSelectedClips}
+                      onClipUpdate={handleClipUpdate}
+                      onGroupClipUpdate={handleGroupClipUpdate}
+                      transitions={transitions}
+                      onClipContextAction={handleClipContextAction}
+                      onUndo={handleUndo}
+                      onRedo={handleRedo}
+                      canUndo={undoStack.length > 0}
+                      canRedo={redoStack.length > 0}
+                      onSplitAtPlayhead={handleSplitAtPlayhead}
+                      onDuplicateClip={handleDuplicateClip}
+                      onDeleteClip={handleDeleteClip}
+                    />
                   </div>
+                </Panel>
+              </PanelGroup>
+              {/* Add keyframe editing UI below the timeline */}
+              {selectedClip && (
+                <div className="bg-gray-800 p-4 border-t border-gray-700">
+                  <h3 className="text-white font-bold mb-2">Keyframes for {selectedClip.name}</h3>
+                  <KeyframePanel
+                    clip={selectedClip}
+                    onUpdate={updatedKeyframes => {
+                      // Update keyframes for the selected clip in tracks
+                      setTracks(prev => {
+                        const type = selectedClip.type || 'video';
+                        const trackIndex = selectedClip.trackIndex ?? 0;
+                        return {
+                          ...prev,
+                          [type]: prev[type].map((track, idx) =>
+                            idx === trackIndex
+                              ? track.map(c => c.id === selectedClip.id ? { ...c, keyframes: updatedKeyframes } : c)
+                              : track
+                          )
+                        };
+                      });
+                      setSelectedClip(clip => clip ? { ...clip, keyframes: updatedKeyframes } : clip);
+                    }}
+                  />
                 </div>
               )}
-            </div>
-            
-            {/* Music Settings */}
-            {selectedMusic && (
-              <div className="mb-4 p-3 border rounded">
-                <h3 className="font-semibold mb-2">Music Settings</h3>
-                <div className="mb-2">
-                  <label className="block text-sm">Selected: <span className="font-medium">{selectedMusic.name}</span></label>
-                  {selectedMusic.isAi && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded ml-2">AI Generated</span>}
-                </div>
-                <label className="block text-sm mb-1">Music Volume: {Math.round(musicVolume * 100)}%</label>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="1" 
-                  step="0.1" 
-                  value={musicVolume} 
-                  onChange={(e) => setMusicVolume(Number(e.target.value))}
-                  className="w-full"
+              {/* Text property editing panel */}
+              {selectedClip && selectedClip.type === 'text' && (
+                <TextPropertiesPanel
+                  selectedClip={selectedClip}
+                  handleUpdateTextClip={handleUpdateTextClip}
                 />
-              </div>
-            )}
-            
-            {/* Action Buttons */}
-            <div className="flex gap-2">
-              <button 
-                onClick={handleApplyMusic} 
-                disabled={!selectedMusic}
-                className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
-              >
-                Apply Music
-              </button>
-              <button 
-                onClick={() => setAiMusicModalOpen(false)} 
-                className="bg-gray-300 px-4 py-2 rounded"
-              >
-                Cancel
-              </button>
+              )}
+              <ImportDialog
+                open={importDialogOpen}
+                onOpenChange={setImportDialogOpen}
+                onImport={handleImport}
+              />
             </div>
-          </div>
-        </div>
-      )}
+          </Panel>
+        </PanelGroup>
+        {/* Trim Modal */}
+        <TrimModal
+          open={trimModalOpen}
+          onClose={() => setTrimModalOpen(false)}
+          onConfirm={handleTrimConfirm}
+          trimStart={trimStart}
+          setTrimStart={setTrimStart}
+          trimEnd={trimEnd}
+          setTrimEnd={setTrimEnd}
+          selectedClip={selectedClip}
+        />
+        {/* Split Modal */}
+        <SplitModal
+          open={splitModalOpen}
+          onClose={() => setSplitModalOpen(false)}
+          onConfirm={handleSplitConfirm}
+          splitTime={splitTime}
+          setSplitTime={setSplitTime}
+          selectedClip={selectedClip}
+        />
+        {/* Text Overlay Modal */}
+        <TextOverlayModal
+          open={textModalOpen}
+          onClose={() => setTextModalOpen(false)}
+          onConfirm={handleTextOverlayConfirm}
+          overlayText={overlayText}
+          setOverlayText={setOverlayText}
+          textStart={textStart}
+          setTextStart={setTextStart}
+          textEnd={textEnd}
+          setTextEnd={setTextEnd}
+          fontSize={fontSize}
+          setFontSize={setFontSize}
+          fontColor={fontColor}
+          setFontColor={setFontColor}
+          textAlignment={textAlignment}
+          setTextAlignment={setTextAlignment}
+          selectedClip={selectedClip}
+        />
+        {/* AI Music Modal */}
+        <AiMusicModal
+          open={aiMusicModalOpen}
+          onClose={() => setAiMusicModalOpen(false)}
+          videoMood={videoMood}
+          musicLibrary={musicLibrary}
+          selectedMusic={selectedMusic}
+          setSelectedMusic={setSelectedMusic}
+          musicVolume={musicVolume}
+          setMusicVolume={setMusicVolume}
+          aiMusicGenerating={aiMusicGenerating}
+          handleGenerateAiMusic={handleGenerateAiMusic}
+          handleApplyMusic={handleApplyMusic}
+        />
+        {/* Export Modal */}
+        <ExportModal
+          open={exportModalOpen}
+          onClose={() => setExportModalOpen(false)}
+          onExport={handleExportWithSettings}
+          exportSettings={exportSettings}
+          setExportSettings={setExportSettings}
+          EXPORT_PRESETS={EXPORT_PRESETS}
+        />
+        {/* Export Progress Modal */}
+        <ExportProgressModal
+          open={processing}
+          progress={exportProgress}
+          previewUrl={exportPreviewUrl}
+        />
+      </div>
     </div>
   );
 };

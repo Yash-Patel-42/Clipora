@@ -4,12 +4,19 @@ import pysubs2
 from pysubs2 import Alignment, Color, SSAStyle, SSAEvent
 import logging
 logging.basicConfig(level=logging.DEBUG)
-modelSize="large"
-model = WhisperModel(modelSize, device="auto", compute_type="int8")
+modelSize = "large"
+model = None
+
+def get_model():
+    global model
+    if model is None:
+        model = WhisperModel(modelSize, device="auto", compute_type="int8")
+    return model
 
 def transcribe(audio_filename):
     try:
-        segments, info = model.transcribe(audio_filename, word_timestamps = True)
+        model = get_model()
+        segments, info = model.transcribe(audio_filename, word_timestamps=True)
         return segments
     except:
         return 0

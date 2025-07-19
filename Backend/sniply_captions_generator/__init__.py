@@ -6,9 +6,7 @@ import pysubs2
 from pysubs2 import Alignment, Color, SSAStyle, SSAEvent
 import logging
 logging.basicConfig(level=logging.DEBUG)
-
-modelSize="large"
-model = WhisperModel(modelSize, device="auto", compute_type="int8")
+# Remove model instantiation here; use lazy loading in captions.py
 
 def asspath(input):
     base_name, _ = os.path.splitext(input)
