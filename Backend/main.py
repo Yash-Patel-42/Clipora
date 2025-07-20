@@ -541,3 +541,7 @@ async def process_video(
 @app.get("/processors")
 def list_processors():
     return {"processors": list(PROCESSORS.keys())} 
+
+@app.get("/")
+def read_root():
+    return {"message": "Sniply backend is running!"} 
