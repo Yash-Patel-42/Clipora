@@ -8,7 +8,7 @@ from moviepy.editor import VideoFileClip
 import shutil
 import sys
 
-app = FastAPI()
+# app = FastAPI()
 
 def apply_clahe_to_frame(frame):
     # Convert to LAB color space
@@ -41,19 +41,6 @@ def color_grade_video(input_path, output_path):
     graded_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
     clip.close()
     graded_clip.close()
-
-@app.post("/process/color_grading")
-async def process_color_grading(file: UploadFile = File(...)):
-    try:
-        with NamedTemporaryFile(delete=False, suffix='.mp4') as temp_in:
-            shutil.copyfileobj(file.file, temp_in)
-            temp_in_path = temp_in.name
-        with NamedTemporaryFile(delete=False, suffix='.mp4') as temp_out:
-            temp_out_path = temp_out.name
-        color_grade_video(temp_in_path, temp_out_path)
-        return FileResponse(temp_out_path, media_type="video/mp4", filename="color_graded.mp4")
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

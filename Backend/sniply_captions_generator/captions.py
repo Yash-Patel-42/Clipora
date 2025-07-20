@@ -62,6 +62,12 @@ def create_ass_file_with_multiple_styles(segments ,output_filename: str = "multi
 # segments  = transcribe("/home/user/subs/audio3.mp3")
 # create_ass_file_with_multiple_styles(segments, output_filename="multi_style_example2.ass")
 
+def generate_captions(input_path, output_path):
+    segments = transcribe(input_path)
+    if not segments or segments == 0:
+        return 0
+    return create_ass_file_with_multiple_styles(segments, output_filename=output_path)
+
 if __name__ == "__main__":
     segments  = transcribe("/home/user/subs/audio3.mp3")
     create_ass_file_with_multiple_styles(segments, output_filename="multi_style_example2.ass")

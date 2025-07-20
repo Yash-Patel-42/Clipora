@@ -1,6 +1,6 @@
-from vid_to_audio import *
-from captions import *
-from apply import *
+from .vid_to_audio import *
+from .captions import *
+from .apply import *
 from faster_whisper import WhisperModel
 import pysubs2
 from pysubs2 import Alignment, Color, SSAStyle, SSAEvent

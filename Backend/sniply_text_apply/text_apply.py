@@ -1,5 +1,5 @@
 import os
-from text import create_ass_file_with_multiple_styles_from_text
+from .text import create_ass_file_with_multiple_styles_from_text
 import subprocess
 # from ffmpeg import ffmpeg
 from pysubs2 import Color, Alignment
