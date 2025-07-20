@@ -19,7 +19,7 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [scrolled]);
 
-  const handleTrySniply = (e) => {
+  const handleTryClipora = (e) => {
     e.preventDefault();
     if (user) {
       navigate('/edit');
@@ -45,7 +45,7 @@ const Navbar = () => {
               <path d="M8 5v14l11-7z"/>
             </svg>
           </div>
-          <span className="text-xl font-bold tracking-tight">Sniply</span>
+          <span className="text-xl font-bold tracking-tight">Clipora</span>
         </div>
 
         <nav className="hidden md:flex items-center space-x-10">
@@ -65,10 +65,10 @@ const Navbar = () => {
 
         <div className="flex items-center gap-4">
           <button 
-            onClick={handleTrySniply}
+            onClick={handleTryClipora}
             className="inline-flex items-center justify-center rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-md hover:bg-blue-700 hover:shadow-lg transition-all"
           >
-            Try Sniply Free
+            Try Clipora Free
           </button>
         </div>
       </div>

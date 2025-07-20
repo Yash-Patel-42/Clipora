@@ -238,7 +238,7 @@ const NewEditingPage = () => {
       try {
         const formData = new FormData();
         formData.append('file', selectedClip.file);
-        const response = await fetch(`${BACKEND_URL}/sniply_smart_trim_silence_part/auto_trim`, {
+        const response = await fetch(`${BACKEND_URL}/clipora_smart_trim_silence_part/auto_trim`, {
           method: 'POST',
           body: formData,
         });
@@ -963,7 +963,7 @@ const NewEditingPage = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'sniply_project.json';
+    a.download = 'clipora_project.json';
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
