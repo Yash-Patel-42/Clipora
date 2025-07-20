@@ -18,8 +18,8 @@ NUM_WORKERS = multiprocessing.cpu_count()
 # Options for GPU acceleration
 MODEL_NAME = "u2net" # u2net is the default high-quality model
 GPU_ENABLED = True # Enable GPU acceleration if available
-# Global session variable
-session = None
+# Remove global session variable
+# session = None
 
 def extract_frames():
     if os.path.exists(FRAME_DIR):
@@ -49,7 +49,7 @@ def process_frame(args):
             return False
             
         with Image.open(input_path) as img:
-            # Create a local session for this process
+            # Create a local session for this process (lazy-load)
             local_session = new_session(model_name=session_model)
             # Use the session
             no_bg = remove(img, session=local_session)

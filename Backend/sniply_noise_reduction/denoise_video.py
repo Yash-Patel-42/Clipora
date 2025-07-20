@@ -6,9 +6,7 @@ import noisereduce as nr
 import soundfile as sf
 from moviepy.editor import VideoFileClip, AudioFileClip
 # FastDVDnet imports
-import torch
-from fastdvdnet.models import FastDVDnet
-from fastdvdnet.fastdvdnet import denoise_seq_fastdvdnet
+# Only import torch and FastDVDnet inside the function that needs them
 
 def print_progress(step, total_steps, description="Progress"):
     if total_steps == 0:
@@ -17,6 +15,9 @@ def print_progress(step, total_steps, description="Progress"):
     print(f"{description}: {percent}% ({step}/{total_steps})", end='\r')
 
 def main(input_path):
+    import torch
+    from fastdvdnet.models import FastDVDnet
+    from fastdvdnet.fastdvdnet import denoise_seq_fastdvdnet
     DIR = os.path.dirname(os.path.abspath(input_path))
     total_steps = 3
     current_step = 1

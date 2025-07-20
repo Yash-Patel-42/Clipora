@@ -1,3 +1,4 @@
+print("=== Starting FastAPI app import ===")
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -65,6 +66,7 @@ from sniply_export.export import export_video
 from sniply_transition.auto_transition import apply_transition_effect
 
 app = FastAPI()
+print("=== FastAPI app object created ===")
 
 # Allow CORS for frontend development
 app.add_middleware(
