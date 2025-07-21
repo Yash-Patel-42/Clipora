@@ -1,5 +1,5 @@
-print("=== Starting FastAPI app import ===")
-from fastapi import FastAPI
+# print("=== Starting FastAPI app import ===")
+# from fastapi import FastAPI
 # from fastapi.middleware.cors import CORSMiddleware
 
 # from sniply_bg_remover.bg_remover_router import bg_remover_router
@@ -14,7 +14,7 @@ from fastapi import FastAPI
 # from sniply_text_apply.text_apply_router import text_apply_router
 # from sniply_transition.transition_router import transition_router
 
-app = FastAPI()
+# app = FastAPI()
 
 # app.add_middleware(
 #     CORSMiddleware,
@@ -36,6 +36,16 @@ app = FastAPI()
 # app.include_router(text_apply_router, prefix="/process/text_apply")
 # app.include_router(transition_router, prefix="/process/transition")
 
+# @app.get("/")
+# def read_root():
+#     return {"message": "Sniply backend is running!"} 
+
+
+# ------------- Trial ----------------#
+from fastapi import FastAPI
+
+app = FastAPI()
+
 @app.get("/")
 def read_root():
-    return {"message": "Sniply backend is running!"} 
+    return {"Hello": "World"}
