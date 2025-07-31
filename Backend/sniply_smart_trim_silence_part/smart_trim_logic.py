@@ -1,53 +1,53 @@
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-import numpy as np
 import os
+import uuid
+from pydub import AudioSegment, silence
+from moviepy.editor import VideoFileClip, concatenate_videoclips
+import tempfile
+import subprocess
 
-def smart_trim_video(input_path, output_path, sample_rate=0.1, threshold=0.01, silence_min_duration=1.5):
-    """
-    Trims silent parts from the video at input_path and saves the result to output_path.
-    Raises Exception on error.
-    """
-    clip = VideoFileClip(input_path)
-    if clip.audio is None:
-        clip.close()
-        raise Exception("No audio track found in this video.")
-    original_fps = clip.fps
-    original_size = (clip.w, clip.h)
-    is_silent = []
-    for t in np.arange(0, clip.duration, sample_rate):
-        frame = clip.audio.get_frame(t)
-        rms = np.sqrt(np.mean(np.square(frame))) if isinstance(frame, (list, tuple, np.ndarray)) else 0
-        is_silent.append(rms < threshold)
-    silent_blocks = []
-    current_silence_start = None
-    times = np.arange(0, clip.duration, sample_rate)
-    for idx, silent in enumerate(is_silent):
-        t = times[idx]
-        if silent:
-            if current_silence_start is None:
-                current_silence_start = t
-        else:
-            if current_silence_start is not None:
-                if t - current_silence_start >= silence_min_duration:
-                    silent_blocks.append((current_silence_start, t))
-                current_silence_start = None
-    if current_silence_start is not None:
-        if clip.duration - current_silence_start >= silence_min_duration:
-            silent_blocks.append((current_silence_start, clip.duration))
-    keep_ranges = []
-    last_end = 0
-    for start, end in silent_blocks:
-        if start > last_end:
-            keep_ranges.append((last_end, start))
-        last_end = end
-    if last_end < clip.duration:
-        keep_ranges.append((last_end, clip.duration))
-    chunks = [clip.subclip(start, end) for start, end in keep_ranges if end > start]
-    if not chunks:
-        clip.close()
+def extract_audio(input_video_path, output_audio_path):
+    command = [
+        "ffmpeg", "-y",
+        "-i", input_video_path,
+        "-vn",  # no video
+        "-ac", "1",  # mono
+        "-ar", "16000",
+        "-f", "wav",
+        output_audio_path
+    ]
+    subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def smart_trim_video(input_path, output_path, silence_thresh_db=-35, min_silence_len=1500):
+    temp_audio_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}_audio.wav")
+    extract_audio(input_path, temp_audio_path)
+
+    audio = AudioSegment.from_wav(temp_audio_path)
+    
+    # Detect non-silent chunks
+    nonsilent_ranges = silence.detect_nonsilent(
+        audio,
+        min_silence_len=min_silence_len,
+        silence_thresh=silence_thresh_db
+    )
+
+    if not nonsilent_ranges:
         raise Exception("No non-silent segments found.")
-    final = concatenate_videoclips(chunks)
-    final = final.resize(newsize=original_size)
+
+    # Merge small silent gaps by padding start and end
+    padded_ranges = []
+    padding = 200  # milliseconds
+    for start, end in nonsilent_ranges:
+        padded_start = max(0, start - padding)
+        padded_end = min(len(audio), end + padding)
+        padded_ranges.append((padded_start / 1000.0, padded_end / 1000.0))  # convert to seconds
+
+    clip = VideoFileClip(input_path)
+    subclips = [clip.subclip(start, end) for start, end in padded_ranges if end > start]
+
+    if not subclips:
+        raise Exception("No valid video segments after trimming.")
+
+    final = concatenate_videoclips(subclips)
     final.write_videofile(
         output_path,
         codec="libx264",
@@ -55,11 +55,14 @@ def smart_trim_video(input_path, output_path, sample_rate=0.1, threshold=0.01, s
         threads=4,
         preset="veryslow",
         bitrate="20M",
-        fps=original_fps,
         ffmpeg_params=["-crf", "18"]
     )
+
     clip.close()
     final.close()
+    os.remove(temp_audio_path)
+
     if not os.path.exists(output_path):
         raise Exception("Smart trimmed video was not created.")
-    return output_path 
+
+    return output_path

@@ -17,7 +17,7 @@ import TextOverlayModal from '../components/New_Editing_Page/component/Modals/Te
 import AiMusicModal from '../components/New_Editing_Page/component/Modals/AiMusicModal';
 import ExportModal from '../components/New_Editing_Page/component/Modals/ExportModal';
 import ExportProgressModal from '../components/New_Editing_Page/component/Modals/ExportProgressModal';
-import AssetSidebar from '../components/New_Editing_Page/component/AssetSidebar';
+// import AssetSidebar from '../components/New_Editing_Page/component/AssetSidebar';
 import TextPropertiesPanel from '../components/New_Editing_Page/component/TextPropertiesPanel';
 
 const NewEditingPage = () => {
@@ -1077,7 +1077,7 @@ const NewEditingPage = () => {
   return (
     <div className="h-screen bg-gray-900 flex flex-row min-w-0">
       {/* Asset Library Sidebar - always visible on the left */}
-      <div className="flex-shrink-0 w-56 bg-gray-800 border-r border-gray-700 min-h-0">
+      {/* <div className="flex-shrink-0 w-56 bg-gray-800 border-r border-gray-700 min-h-0">
         <AssetSidebar
           assets={assets}
           onAssetDragStart={(e, asset) => {
@@ -1092,7 +1092,7 @@ const NewEditingPage = () => {
             e.dataTransfer.setData('transitionType', tr.type);
           }}
         />
-      </div>
+      </div> */}
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <PanelGroup direction="horizontal">

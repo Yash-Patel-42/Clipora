@@ -14,13 +14,22 @@ def apply_clahe_to_frame(frame):
     # Convert to LAB color space
     lab = cv2.cvtColor(frame, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
-    # Apply CLAHE to L-channel
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    # Stronger CLAHE (increase contrast)
+    clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(4,4))
     cl = clahe.apply(l)
     limg = cv2.merge((cl, a, b))
-    # Convert back to RGB
     enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2RGB)
+    # Convert to HSV to adjust saturation and brightness
+    hsv = cv2.cvtColor(enhanced, cv2.COLOR_RGB2HSV).astype(np.float32)
+    # Boost saturation (scale it up to 1.4x)
+    hsv[:, :, 1] *= 1.4
+    # Slight brightness increase (value channel)
+    hsv[:, :, 2] *= 1.1
+    # Clip the values to valid range [0,255]
+    hsv = np.clip(hsv, 0, 255).astype(np.uint8)
+    enhanced = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
     return enhanced
+
 
 def color_grade_video(input_path, output_path):
     clip = VideoFileClip(input_path)

@@ -4,6 +4,7 @@ import os
 import shutil
 import uuid
 from .captions import generate_captions
+from .apply import apply_caption
 
 captions_router = APIRouter()
 
@@ -20,13 +21,19 @@ async def generate_video_captions(file: UploadFile = File(...)):
     os.makedirs(input_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
     input_path = os.path.join(input_dir, "input.mp4")
-    output_path = os.path.join(output_dir, "captions.ass")
+    ass_path = os.path.join(output_dir, "captions.ass")
+    output_video_path = os.path.join(output_dir, "output_with_captions.mp4")
     with open(input_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     try:
-        result = generate_captions(input_path, output_path)
-        if result == 0 or result is None or not os.path.exists(output_path):
+        # Generate captions (.ass)
+        result = generate_captions(input_path, ass_path)
+        if result == 0 or result is None or not os.path.exists(ass_path):
             raise Exception("Caption generation failed.")
-        return FileResponse(output_path, media_type="text/x-ssa", filename="captions.ass")
+        # Burn captions into video
+        apply_result = apply_caption(input_path, ass_path, output_video_path)
+        if apply_result == 0 or not os.path.exists(output_video_path):
+            raise Exception("Failed to apply captions to video.")
+        return FileResponse(output_video_path, media_type="video/mp4", filename="output_with_captions.mp4")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Caption generation failed: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Caption generation failed: {str(e)}")

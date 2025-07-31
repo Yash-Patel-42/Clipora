@@ -3,14 +3,15 @@ from faster_whisper import WhisperModel
 import pysubs2
 from pysubs2 import Alignment, Color, SSAStyle, SSAEvent
 import logging
+import torch
 logging.basicConfig(level=logging.DEBUG)
 modelSize = "large"
 model = None
-
+device = "cuda" if torch.cuda.is_available() else "cpu"
 def get_model():
     global model
     if model is None:
-        model = WhisperModel(modelSize, device="auto", compute_type="int8")
+        model = WhisperModel(modelSize, device=device, compute_type="int8")
     return model
 
 def transcribe(audio_filename):

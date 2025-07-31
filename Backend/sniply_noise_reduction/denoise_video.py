@@ -1,12 +1,14 @@
 import os
 import cv2
 import numpy as np
-import librosa
-import noisereduce as nr
+import subprocess
 import soundfile as sf
-from moviepy.editor import VideoFileClip, AudioFileClip
-# FastDVDnet imports
-# Only import torch and FastDVDnet inside the function that needs them
+from pydub import AudioSegment
+import noisereduce as nr
+import sys
+
+cv2.setNumThreads(4)
+
 
 def print_progress(step, total_steps, description="Progress"):
     if total_steps == 0:
@@ -14,136 +16,109 @@ def print_progress(step, total_steps, description="Progress"):
     percent = int((step / total_steps) * 100)
     print(f"{description}: {percent}% ({step}/{total_steps})", end='\r')
 
-def main(input_path):
-    import torch
-    from fastdvdnet.models import FastDVDnet
-    from fastdvdnet.fastdvdnet import denoise_seq_fastdvdnet
-    DIR = os.path.dirname(os.path.abspath(input_path))
-    total_steps = 3
-    current_step = 1
 
-    # ---------------- STEP 1: Extract and Reduce Audio ----------------
-    print(f"Step {current_step}/{total_steps}: Processing audio...")
-    video = VideoFileClip(input_path)
-    audio = video.audio
-    audio_available = False
-    if audio is not None:
-        try:
-            audio_path = os.path.join(DIR, "input_audio.wav")
-            reduced_audio_path = os.path.join(DIR, "reduced_audio.wav")
-            audio.write_audiofile(audio_path)
-            y, sr = librosa.load(audio_path, sr=None)
-            reduced_noise = nr.reduce_noise(y=y, sr=sr)
-            sf.write(reduced_audio_path, reduced_noise, sr)
-            audio_available = True
-        except Exception as e:
-            print(f"Warning: Could not process audio: {e}")
-            audio_available = False
-    else:
-        print("Warning: Input video has no audio track.")
-    print(f"Step {current_step}/{total_steps} complete.\n")
-    current_step += 1
+def reduce_audio_noise(input_audio_path, output_audio_path):
+    audio = AudioSegment.from_file(input_audio_path)
+    samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+    sample_rate = audio.frame_rate
+    samples = samples / (2 ** 15)
+    reduced = nr.reduce_noise(y=samples, sr=sample_rate, prop_decrease=1.0)
+    reduced = (reduced * (2 ** 15)).astype(np.int16)
+    sf.write(output_audio_path, reduced, sample_rate)
 
-    # ---------------- STEP 2: Denoise Video Frames ----------------
-    print(f"Step {current_step}/{total_steps}: Denoising video frames...")
 
-    # Choose denoising method
-    USE_OPENCV_DENOISING = True  # Set to False to use FastDVDnet
+def extract_audio(input_video_path, output_audio_path):
+    command = [
+        "ffmpeg", "-y",
+        "-i", input_video_path,
+        "-vn",
+        "-ac", "1",
+        "-ar", "16000",
+        output_audio_path
+    ]
+    subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # Read all frames into memory
+
+def merge_audio_video(video_path, audio_path, output_path):
+    command = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-i", audio_path,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        output_path
+    ]
+    subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def denoise_video_opencv(input_path, output_path):
     cap = cv2.VideoCapture(input_path)
-    orig_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    orig_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frames = []
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    frame_num = 0
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        denoised = cv2.fastNlMeansDenoisingColored(
+            rgb, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
+        out.write(cv2.cvtColor(denoised, cv2.COLOR_RGB2BGR))
+        frame_num += 1
+        if frame_num % 10 == 0:
+            print(f"Denoised frame {frame_num}")
+
     cap.release()
-
-    denoised_video_path = os.path.join(DIR, "denoised_video.mp4")
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(denoised_video_path, fourcc, fps, (orig_width, orig_height))
-
-    if USE_OPENCV_DENOISING:
-        print("Using OpenCV fastNlMeansDenoisingColored...")
-        def denoise_video_opencv(frames, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21):
-            denoised = []
-            for i, frame in enumerate(frames):
-                denoised_frame = cv2.fastNlMeansDenoisingColored(frame, None, h, hColor, templateWindowSize, searchWindowSize)
-                denoised.append(denoised_frame)
-                if (i+1) % 10 == 0 or i == len(frames)-1:
-                    print(f'OpenCV: Denoised {i+1}/{len(frames)} frames')
-            return denoised
-        denoised_frames = denoise_video_opencv(frames)
-        for i, frame in enumerate(denoised_frames):
-            print(f'Frame {i+1}/{len(denoised_frames)}: shape={frame.shape}, dtype={frame.dtype}')
-            out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-    else:
-        print("Using FastDVDnet deep learning denoising...")
-        # Init model
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f"Using device: {device}")
-        model = FastDVDnet(num_input_frames=5)
-        model_path = os.path.join(os.path.dirname(__file__), 'fastdvdnet', 'model.pth')
-        state_dict = torch.load(model_path, map_location=device)
-        from collections import OrderedDict
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            name = k[7:] if k.startswith('module.') else k # remove `module.`
-            new_state_dict[name] = v
-        model.load_state_dict(new_state_dict)
-        model = model.to(device)
-        model.eval()
-        temp_psz = 5
-        ctrlfr_idx = temp_psz // 2
-        noise_std = torch.FloatTensor([25/255.]).to(device)
-        total = len(frames)
-        with torch.no_grad():
-            for i in range(total):
-                # Build window with reflection at borders
-                window = []
-                for j in range(i - ctrlfr_idx, i + ctrlfr_idx + 1):
-                    idx = min(max(j, 0), total - 1)  # reflect at borders
-                    window.append(frames[idx])
-                window_np = np.stack([f.transpose(2, 0, 1) for f in window], axis=0)  # [5, 3, H, W]
-                window_np = window_np.astype(np.float32) / 255.0
-                seq = torch.from_numpy(window_np).to(device)
-                seq = seq.unsqueeze(0)  # [1, 5, 3, H, W]
-                seq = seq.squeeze(0)    # [5, 3, H, W] for denoise_seq_fastdvdnet
-                # FastDVDnet expects [numframes, C, H, W]
-                denoised = denoise_seq_fastdvdnet(seq, noise_std, temp_psz, model)  # [5, 3, H, W]
-                # Write only the center frame
-                center_frame = denoised[ctrlfr_idx].cpu().numpy()
-                center_frame = (center_frame * 255).astype(np.uint8).transpose(1, 2, 0)
-                print(f'Frame {i+1}/{total}: shape={center_frame.shape}, dtype={center_frame.dtype}')
-                out.write(cv2.cvtColor(center_frame, cv2.COLOR_RGB2BGR))
-                if (i+1) % 10 == 0 or i == total-1:
-                    print(f'FastDVDnet: Denoised {i+1}/{total} frames')
-        torch.cuda.empty_cache()
     out.release()
-    print(f"\nStep {current_step}/{total_steps} complete.\n")
+
+
+def main(input_path, output_path=None):
+    DIR = os.path.dirname(os.path.abspath(input_path))
+    if output_path is None:
+        output_path = os.path.join(DIR, "output_final.mp4")
+
+    total_steps = 3
+    current_step = 1
+
+    # Step 1: Audio Processing
+    print(f"Step {current_step}/{total_steps}: Processing audio...")
+    audio_path = os.path.join(DIR, "input_audio.wav")
+    reduced_audio_path = os.path.join(DIR, "reduced_audio.wav")
+    audio_available = False
+    try:
+        extract_audio(input_path, audio_path)
+        reduce_audio_noise(audio_path, reduced_audio_path)
+        audio_available = True
+    except Exception as e:
+        print(f"Warning: Audio processing failed: {e}")
+    print(f"Step {current_step}/{total_steps} complete.\n")
     current_step += 1
 
-    # ---------------- STEP 3: Combine Denoised Video + Reduced Audio ----------------
-    print(f"Step {current_step}/{total_steps}: Merging audio and video...")
-    final_video = VideoFileClip(denoised_video_path)
-    if audio_available:
-        audio = AudioFileClip(os.path.join(DIR, "reduced_audio.wav"))
-        final_video = final_video.set_audio(audio)
-    else:
-        pass # No audio to merge
+    # Step 2: Video Denoising
+    print(f"Step {current_step}/{total_steps}: Denoising video frames...")
+    denoised_video_path = os.path.join(DIR, "denoised_video.mp4")
+    denoise_video_opencv(input_path, denoised_video_path)
+    print(f"Step {current_step}/{total_steps} complete.\n")
+    current_step += 1
 
-    final_output_path = os.path.join(DIR, "output_final.mp4")
-    final_video.write_videofile(final_output_path, codec="libx264", audio_codec="aac")
-    print(f"\n✅ Denoising complete. Final output: {final_output_path}\n")
+    # Step 3: Merge Audio + Video
+    print(f"Step {current_step}/{total_steps}: Merging audio and video...")
+    if audio_available:
+        merge_audio_video(denoised_video_path, reduced_audio_path, output_path)
+    else:
+        os.rename(denoised_video_path, output_path)
+    print(f"\n✅ Denoising complete. Final output: {output_path}\n")
+
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 2:
-        print("Usage: python denoise_video.py <input_video_path>")
+    if len(sys.argv) == 2:
+        main(sys.argv[1])
+    elif len(sys.argv) == 3:
+        main(sys.argv[1], sys.argv[2])
     else:
-        main(sys.argv[1]) 
+        print("Usage: python denoise_video.py <input_path> [output_path]")
