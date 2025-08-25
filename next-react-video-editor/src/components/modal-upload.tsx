@@ -6,6 +6,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "./ui/dialog";
+import { useSelectedFiles } from "@/context/SelectedFilesContext";
 import { FileIcon, UploadIcon, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
@@ -52,6 +53,7 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
 	const [isDragOver, setIsDragOver] = useState(false);
 	const [isUploading, setIsUploading] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
+	const { setSelectedFiles } = useSelectedFiles();
 
 	const triggerFileInput = () => {
 		fileInputRef.current?.click();
@@ -61,7 +63,7 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
 		if (!e.target.files?.length) return;
 
 		const selectedFiles = Array.from(e.target.files);
-
+		setSelectedFiles(selectedFiles);
 		const newFiles = selectedFiles
 			.filter((f) => !files.some((fileObj) => fileObj.file?.name === f.name))
 			.map((f) => ({ id: crypto.randomUUID(), file: f }));
@@ -177,14 +179,14 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
 		// Prepare UploadFile object for URL if present
 		const urlUploads = videoUrl.trim()
 			? [
-					{
-						id: crypto.randomUUID(),
-						url: videoUrl.trim(),
-						type: "url",
-						status: "pending" as const,
-						progress: 0,
-					},
-				]
+				{
+					id: crypto.randomUUID(),
+					url: videoUrl.trim(),
+					type: "url",
+					status: "pending" as const,
+					progress: 0,
+				},
+			]
 			: [];
 
 		// Add to pending uploads
@@ -233,11 +235,10 @@ const ModalUpload: React.FC<ModalUploadProps> = ({ type = "all" }) => {
 							/>
 
 							<div
-								className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-									isDragOver
-										? "border-primary bg-primary/10"
-										: "border border-border hover:border-muted-foreground/50"
-								}`}
+								className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isDragOver
+									? "border-primary bg-primary/10"
+									: "border border-border hover:border-muted-foreground/50"
+									}`}
 								onDragOver={handleDragOver}
 								onDragLeave={handleDragLeave}
 								onDrop={handleDrop}

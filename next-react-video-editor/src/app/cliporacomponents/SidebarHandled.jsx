@@ -1,12 +1,14 @@
 "use client"
 import { useState } from 'react';
+import { useSelectedFiles } from "@/context/SelectedFilesContext";
 import Sidebar from './Sidebar';
 
 export default function SidebarHandled() {
+    const { selectedFiles } = useSelectedFiles();
     const [processing, setProcessing] = useState(false);
     // Handler for sidebar tool clicks
     const handleToolClick = async (tool) => {
-        if (!selectedClip) {
+        if (!selectedFiles || selectedFiles.length === 0) {
             alert('Please import and select a video first.');
             return;
         }
@@ -15,7 +17,7 @@ export default function SidebarHandled() {
             setProcessing(true);
             try {
                 const formData = new FormData();
-                formData.append('file', selectedClip.file);
+                formData.append('file', selectedFiles[0]);
 
                 let endpoint = '';
                 let additionalParams = {};
@@ -252,7 +254,7 @@ export default function SidebarHandled() {
         // TODO: Add other tool integrations here
     };
 
-    
+
     return (
         <Sidebar onToolClick={handleToolClick} processing={processing} />
     )
