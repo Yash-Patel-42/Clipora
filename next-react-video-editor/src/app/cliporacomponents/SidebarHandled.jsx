@@ -2,11 +2,14 @@
 import { useState } from 'react';
 import { useSelectedFiles } from "@/context/SelectedFilesContext";
 import Sidebar from './Sidebar';
+import ModalUpload from "@/components/modal-upload";
+
 
 export default function SidebarHandled() {
     const { selectedFiles } = useSelectedFiles();
     const [processing, setProcessing] = useState(false);
     // Handler for sidebar tool clicks
+    const BACKEND_URL = "https://localhost:8080/"
     const handleToolClick = async (tool) => {
         if (!selectedFiles || selectedFiles.length === 0) {
             alert('Please import and select a video first.');
