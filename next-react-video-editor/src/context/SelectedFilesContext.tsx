@@ -1,3 +1,4 @@
+"use client";
 import { createContext, useContext, useState } from "react";
 const SelectedFilesContext = createContext();
 export function useSelectedFiles() { return useContext(SelectedFilesContext); }
