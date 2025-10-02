@@ -227,7 +227,7 @@ const Editor = ({ tempId, id }: { tempId?: string; id?: string }) => {
 							</div>
 							<div className="flex-end " style={{
 								width: 'calc(100%/3)'
-							}}><SidebarHandled /></div>
+							}}><SidebarHandled stateManager={stateManager}/></div>
 						</div>
 					</ResizablePanel>
 					<ResizableHandle />
