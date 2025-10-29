@@ -7,6 +7,7 @@ import uuid
 import sys
 import traceback
 
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 sys.path.append(os.path.join(os.path.dirname(__file__), "sniply_bg_remover"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "sniply_noise_reduction"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "sniply_text_apply"))
@@ -161,3 +162,8 @@ async def process_video(
 @app.get("/processors")
 def list_processors():
     return {"processors": list(PROCESSORS.keys())}
+
+
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Backend is running successfully"}
