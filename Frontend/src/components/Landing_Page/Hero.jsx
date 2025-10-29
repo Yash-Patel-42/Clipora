@@ -1,17 +1,13 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+// import { useAuth } from '../../context/AuthContext';
 
 const Hero = () => {
-  const { user } = useAuth();
+  // const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleStartEditing = () => {
-    if (user) {
       navigate('/edit');
-    } else {
-      navigate('/login');
-    }
   };
 
   return (

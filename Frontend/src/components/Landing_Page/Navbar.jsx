@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+// import { useAuth } from '../../context/AuthContext';
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
-  const { user } = useAuth();
+  // const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,11 +21,7 @@ const Navbar = () => {
 
   const handleTrySniply = (e) => {
     e.preventDefault();
-    if (user) {
       navigate('/edit');
-    } else {
-      navigate('/login');
-    }
   };
 
   return (
