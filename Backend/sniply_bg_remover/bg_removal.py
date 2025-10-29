@@ -38,7 +38,7 @@ def run_bg_removal_pipeline(
     shutil.rmtree(frame_dir, ignore_errors=True)
     shutil.rmtree(output_frame_dir, ignore_errors=True)
 
-    print(f"✅ Background removal done in {time.time() - t0:.1f}s")
+    print(f"Background removal done in {time.time() - t0:.1f}s")
 
 
 def extract_frames(input_video: str, frame_dir: str, frame_rate: int):
@@ -69,8 +69,6 @@ def remove_backgrounds(
     os.makedirs(output_frame_dir)
     frames = sorted(os.listdir(frame_dir))
 
-    # Use a partial function to pass the session and directories to the worker
-    # This avoids issues with pickling the session object for multiprocessing
     process_func = partial(
         process_frame_wrapper,
         frame_dir=frame_dir,
@@ -82,9 +80,9 @@ def remove_backgrounds(
         list(tqdm(p.imap(process_func, frames), total=len(frames)))
 
 
-def process_frame_wrapper(frame_file: str, frame_dir: str, output_frame_dir: str, model_name: str):
-    """A wrapper to initialize the session within each worker process."""
-    # Each worker process gets its own session
+def process_frame_wrapper(
+    frame_file: str, frame_dir: str, output_frame_dir: str, model_name: str
+):
     session = new_session(model_name=model_name)
     in_path = os.path.join(frame_dir, frame_file)
     out_path = os.path.join(output_frame_dir, frame_file)
@@ -94,7 +92,7 @@ def process_frame_wrapper(frame_file: str, frame_dir: str, output_frame_dir: str
             no_bg.save(out_path)
         return True
     except Exception as e:
-        print(f"❌ {frame_file}: {e}")
+        print(f"{frame_file}: {e}")
         return False
 
 
@@ -121,7 +119,6 @@ def create_video(output_frame_dir: str, output_video: str, frame_rate: int):
 
 
 if __name__ == "__main__":
-    # This part is for direct script execution for testing
     run_bg_removal_pipeline(
         input_video="input.mp4",
         output_video="output.mp4",

@@ -7,13 +7,16 @@ import uuid
 import sys
 import traceback
 
-# Import background remover and noise reduction logic
-sys.path.append(os.path.join(os.path.dirname(__file__), 'sniply_bg_remover'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'sniply_noise_reduction'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'sniply_text_apply'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "sniply_bg_remover"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "sniply_noise_reduction"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "sniply_text_apply"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "sniply_bg_removal_icon"))
 
 from sniply_bg_remover.bg_removal import run_bg_removal_pipeline
-from sniply_text_apply.apply_text import apply_text_to_video_ffmpeg as apply_text_to_video
+from sniply_text_apply.apply_text import (
+    apply_text_to_video_ffmpeg as apply_text_to_video,
+)
+from sniply_bg_removal_icon.remove_icon_bg import remove_background_from_media
 
 from sniply_noise_reduction.denoise_video import fast_denoise
 
@@ -28,45 +31,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # Processor registry
 PROCESSORS = {}
 
+
 def register_processor(name):
     def decorator(func):
         PROCESSORS[name] = func
         return func
+
     return decorator
 
-@register_processor('bg_remover')
+
+@register_processor("bg_remover")
 def process_bg_remover(input_path, output_path):
     run_bg_removal_pipeline(input_video=input_path, output_video=output_path)
     return output_path
 
-@register_processor('noise_reduction')
+
+@register_processor("noise_reduction")
 def process_noise_reduction(input_path, output_path):
     try:
-        # The fast_denoise function will create 'output_final.mp4' in the same directory as the input file.
         fast_denoise(input_path)
-        
-        # The output file from fast_denoise is named 'output_final.mp4' and is in the same directory as the input.
-        denoised_file_path = os.path.join(os.path.dirname(input_path), "output_final.mp4")
-        
-        # Move the denoised file to the final output path.
+        denoised_file_path = os.path.join(
+            os.path.dirname(input_path), "output_final.mp4"
+        )
         shutil.move(denoised_file_path, output_path)
-        
+
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Noise reduction failed: {str(e)}")
-        
+
     return output_path
 
-@register_processor('text_apply')
-def process_text_apply(input_path, output_path, text, font_size, font_color, box_color, box_border, position):
+
+@register_processor("text_apply")
+def process_text_apply(
+    input_path,
+    output_path,
+    text,
+    font_size,
+    font_color,
+    box_color,
+    box_border,
+    position,
+):
     apply_text_to_video(
         input_path=input_path,
         text=text,
@@ -75,9 +89,16 @@ def process_text_apply(input_path, output_path, text, font_size, font_color, box
         font_color=font_color,
         box_color=box_color,
         box_border=box_border,
-        position=position
+        position=position,
     )
     return output_path
+
+
+@register_processor("bg_remover_icon")
+def process_bg_remover_icon(input_path, output_path):
+    remove_background_from_media(input_path, output_path)
+    return output_path
+
 
 @app.post("/process/{processor_name}")
 async def process_video(
@@ -88,25 +109,37 @@ async def process_video(
     font_color: str = Form("white"),
     box_color: str = Form("black@0.5"),
     box_border: int = Form(20),
-    position: str = Form("bottom")
+    position: str = Form("bottom"),
 ):
     if processor_name not in PROCESSORS:
         raise HTTPException(status_code=404, detail="Processor not found.")
-    # Save uploaded file
     process_id = str(uuid.uuid4())
     input_dir = os.path.join(UPLOAD_DIR, process_id)
     output_dir = os.path.join(RESULTS_DIR, process_id)
     os.makedirs(input_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
     input_path = os.path.join(input_dir, file.filename)
-    output_path = os.path.join(output_dir, "output.mp4")
+
+    if processor_name == "bg_remover_icon":
+        file_ext = os.path.splitext(file.filename)[1]
+        output_filename = f"output{file_ext}"
+        media_type = f"image/{file_ext.lstrip('.')}"
+        if file_ext == ".gif":
+            media_type = "image/gif"
+    else:
+        output_filename = "output.mp4"
+        media_type = "video/mp4"
+
+    output_path = os.path.join(output_dir, output_filename)
+
     with open(input_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    # Process
     try:
-        if processor_name == 'text_apply':
+        if processor_name == "text_apply":
             if not text:
-                raise HTTPException(status_code=400, detail="Text is required for text_apply processor.")
+                raise HTTPException(
+                    status_code=400, detail="Text is required for text_apply processor."
+                )
             PROCESSORS[processor_name](
                 input_path,
                 output_path,
@@ -115,16 +148,16 @@ async def process_video(
                 font_color=font_color,
                 box_color=box_color,
                 box_border=box_border,
-                position=position
+                position=position,
             )
         else:
             PROCESSORS[processor_name](input_path, output_path)
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
-    # Return processed video
-    return FileResponse(output_path, media_type="video/mp4", filename="output.mp4")
+    return FileResponse(output_path, media_type=media_type, filename=output_filename)
+
 
 @app.get("/processors")
 def list_processors():
-    return {"processors": list(PROCESSORS.keys())} 
+    return {"processors": list(PROCESSORS.keys())}
