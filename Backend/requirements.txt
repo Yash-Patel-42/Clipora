@@ -1,14 +1,8 @@
 fastapi
 uvicorn
+python-multipart
 rembg
 Pillow
 tqdm
-numpy
-opencv-python
-librosa
-noisereduce
-moviepy
-soundfile
-onnxruntime
-python-multipart
 ffmpeg-python
+onnxruntime
