@@ -5,3 +5,4 @@ rembg
 Pillow
 tqdm
 ffmpeg-python
+onnxruntime
