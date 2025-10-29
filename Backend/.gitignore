@@ -26,6 +26,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+rnnoise_models/
 
 # Virtual environments
 env/
