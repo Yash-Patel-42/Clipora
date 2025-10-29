@@ -1,158 +1,128 @@
 import os
 import shutil
 import subprocess
-from rembg import remove, new_session
-from PIL import Image
-from tqdm import tqdm
-import multiprocessing
 import time
+from functools import partial
+from multiprocessing import Pool, cpu_count
 
-# Default settings
-INPUT_VIDEO = "input.mp4"
-FRAME_DIR = "frames"
-OUTPUT_FRAME_DIR = "no_bg_frames"
-OUTPUT_VIDEO = "output.mp4"
-FPS = 30  # Adjust as needed
-NUM_WORKERS = multiprocessing.cpu_count()
+from PIL import Image
+from rembg import new_session, remove
+from tqdm import tqdm
 
-# Options for GPU acceleration
-MODEL_NAME = "u2net" # u2net is the default high-quality model
-GPU_ENABLED = True # Enable GPU acceleration if available
-# Remove global session variable
-# session = None
 
-def extract_frames():
-    if os.path.exists(FRAME_DIR):
-        shutil.rmtree(FRAME_DIR)
-    os.makedirs(FRAME_DIR)
-    print("Extracting frames...")
-    
-    # Use os.path.join for consistent path handling
-    frame_pattern = os.path.join(FRAME_DIR, "frame_%04d.png")
-    
-    subprocess.run([
-        r"C:\ffmpeg\bin\ffmpeg.exe",
-        "-i", INPUT_VIDEO,
-        frame_pattern
-    ])
+def run_bg_removal_pipeline(
+    input_video: str,
+    output_video: str,
+    model_name: str = "u2netp",
+    frame_rate: int = 30,
+    workers: int = min(cpu_count(), 6),
+):
+    """Runs the complete background removal pipeline."""
+    print(f"Starting background removal for {input_video}...")
+    t0 = time.time()
 
-def process_frame(args):
-    """Process a single frame with background removal"""
-    frame, input_dir, output_dir, session_model = args
-    
-    input_path = os.path.join(input_dir, frame)
-    output_path = os.path.join(output_dir, frame)
-    
+    base_dir = os.path.dirname(input_video)
+    frame_dir = os.path.join(base_dir, "frames")
+    output_frame_dir = os.path.join(base_dir, "no_bg_frames")
+
+    # 1. Extract frames
+    extract_frames(input_video, frame_dir, frame_rate)
+
+    # 2. Remove backgrounds
+    remove_backgrounds(frame_dir, output_frame_dir, model_name, workers)
+
+    # 3. Create video
+    create_video(output_frame_dir, output_video, frame_rate)
+
+    # 4. Clean up
+    shutil.rmtree(frame_dir, ignore_errors=True)
+    shutil.rmtree(output_frame_dir, ignore_errors=True)
+
+    print(f"✅ Background removal done in {time.time() - t0:.1f}s")
+
+
+def extract_frames(input_video: str, frame_dir: str, frame_rate: int):
+    print(f"Extracting frames to {frame_dir}...")
+    shutil.rmtree(frame_dir, ignore_errors=True)
+    os.makedirs(frame_dir)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-i",
+            input_video,
+            "-r",
+            str(frame_rate),
+            os.path.join(frame_dir, "frame_%04d.png"),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+        ],
+        check=True,
+    )
+
+
+def remove_backgrounds(
+    frame_dir: str, output_frame_dir: str, model_name: str, workers: int
+):
+    print(f"Removing backgrounds from frames in {frame_dir}...")
+    shutil.rmtree(output_frame_dir, ignore_errors=True)
+    os.makedirs(output_frame_dir)
+    frames = sorted(os.listdir(frame_dir))
+
+    # Use a partial function to pass the session and directories to the worker
+    # This avoids issues with pickling the session object for multiprocessing
+    process_func = partial(
+        process_frame_wrapper,
+        frame_dir=frame_dir,
+        output_frame_dir=output_frame_dir,
+        model_name=model_name,
+    )
+
+    with Pool(workers) as p:
+        list(tqdm(p.imap(process_func, frames), total=len(frames)))
+
+
+def process_frame_wrapper(frame_file: str, frame_dir: str, output_frame_dir: str, model_name: str):
+    """A wrapper to initialize the session within each worker process."""
+    # Each worker process gets its own session
+    session = new_session(model_name=model_name)
+    in_path = os.path.join(frame_dir, frame_file)
+    out_path = os.path.join(output_frame_dir, frame_file)
     try:
-        if not os.path.exists(input_path):
-            print(f"Frame not found: {input_path}")
-            return False
-            
-        with Image.open(input_path) as img:
-            # Create a local session for this process (lazy-load)
-            local_session = new_session(model_name=session_model)
-            # Use the session
-            no_bg = remove(img, session=local_session)
-            no_bg.save(output_path)
+        with Image.open(in_path) as img:
+            no_bg = remove(img, session=session)
+            no_bg.save(out_path)
         return True
     except Exception as e:
-        print(f"Error processing {frame}: {e}")
+        print(f"❌ {frame_file}: {e}")
         return False
 
-def remove_backgrounds():
-    if os.path.exists(OUTPUT_FRAME_DIR):
-        shutil.rmtree(OUTPUT_FRAME_DIR)
-    os.makedirs(OUTPUT_FRAME_DIR)
-    
-    print("Initializing background removal model...")
-    
-    frames = sorted(os.listdir(FRAME_DIR))
-    if not frames:
-        raise Exception("No frames were extracted from the video")
-    
-    # Get absolute paths to avoid issues with multiprocessing
-    frame_dir_abs = os.path.abspath(FRAME_DIR)
-    output_dir_abs = os.path.abspath(OUTPUT_FRAME_DIR)
-        
-    print(f"Removing backgrounds using {NUM_WORKERS} workers...")
-    print(f"Input directory: {frame_dir_abs}")
-    print(f"Output directory: {output_dir_abs}")
-    
-    # Prepare arguments - pass absolute paths and model name
-    args_list = [(frame, frame_dir_abs, output_dir_abs, MODEL_NAME) for frame in frames]
-    
-    # Process frames with fewer workers to avoid memory issues
-    actual_workers = min(NUM_WORKERS, 4)  # Limit to 4 workers max
-    print(f"Using {actual_workers} workers for processing")
-    
-    # Process frames in parallel using multiprocessing
-    with multiprocessing.Pool(processes=actual_workers) as pool:
-        results = list(tqdm(
-            pool.imap(process_frame, args_list),
-            total=len(frames),
-            desc="Processing frames"
-        ))
-    
-    # Verify frames were processed
-    if not os.path.exists(OUTPUT_FRAME_DIR):
-        raise Exception("Output directory does not exist")
-        
-    processed_frames = os.listdir(OUTPUT_FRAME_DIR)
-    if not processed_frames:
-        raise Exception("No frames were processed successfully")
-    print(f"Successfully processed {len(processed_frames)} frames")
 
-def detect_fps():
-    """Detect FPS from the input video"""
-    result = subprocess.run([
-        r"C:\ffmpeg\bin\ffprobe.exe", "-v", "error", 
-        "-select_streams", "v:0", 
-        "-show_entries", "stream=r_frame_rate", 
-        "-of", "default=noprint_wrappers=1:nokey=1", 
-        INPUT_VIDEO
-    ], capture_output=True, text=True)
-    
-    fps_str = result.stdout.strip()
-    if "/" in fps_str:
-        numerator, denominator = map(int, fps_str.split('/'))
-        return numerator / denominator
-    else:
-        return float(fps_str)
+def create_video(output_frame_dir: str, output_video: str, frame_rate: int):
+    print(f"Creating video {output_video}...")
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-framerate",
+            str(frame_rate),
+            "-i",
+            os.path.join(output_frame_dir, "frame_%04d.png"),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-pix_fmt",
+            "yuv420p",
+            output_video,
+        ],
+        check=True,
+    )
 
-def create_video():
-    print("Creating final video...")
-    # Preserve original video FPS
-    fps = detect_fps()
-    print(f"Using original FPS: {fps}")
-    
-    # Use properly formatted path for output frames
-    frame_pattern = os.path.join(OUTPUT_FRAME_DIR, "frame_%04d.png")
-    
-    # Check if output frames exist
-    if not os.path.exists(OUTPUT_FRAME_DIR) or len(os.listdir(OUTPUT_FRAME_DIR)) == 0:
-        raise Exception("No output frames available to create video")
-        
-    print(f"Found {len(os.listdir(OUTPUT_FRAME_DIR))} frames for video creation")
-    
-    # Use higher quality settings for the output
-    subprocess.run([
-        r"C:\ffmpeg\bin\ffmpeg.exe", 
-        "-framerate", str(fps),
-        "-i", frame_pattern,
-        "-c:v", "libx264", "-preset", "medium", 
-        "-crf", "18", # Higher quality (lower is better, 18-23 is good)
-        "-pix_fmt", "yuv420p",
-        OUTPUT_VIDEO
-    ])
 
 if __name__ == "__main__":
-    start_time = time.time()
-    
-    print("Starting background removal process...")
-    extract_frames()
-    remove_backgrounds()
-    create_video()
-    
-    duration = time.time() - start_time
-    print(f"✅ Done! Processing took {duration:.2f} seconds")
-    print(f"Output saved to: {OUTPUT_VIDEO}") 
+    # This part is for direct script execution for testing
+    run_bg_removal_pipeline(
+        input_video="input.mp4",
+        output_video="output.mp4",
+    )

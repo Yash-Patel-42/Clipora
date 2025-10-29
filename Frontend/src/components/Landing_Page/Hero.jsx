@@ -60,7 +60,7 @@ const Hero = () => {
                   <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
                 </div>
-                <div className="text-sm text-gray-400">Untitled Project - Clipora</div>
+                <div className="text-sm text-gray-400">Untitled Project - Sniply</div>
               </div>
               <div className="flex space-x-4">
                 <div className="px-3 py-1 bg-blue-600 rounded-md text-xs font-medium text-white">Export</div>

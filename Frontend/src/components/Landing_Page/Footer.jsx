@@ -12,7 +12,7 @@ const Footer = () => {
                   <path d="M8 5v14l11-7z"/>
                 </svg>
               </div>
-              <span className="text-lg font-bold">Clipora</span>
+              <span className="text-lg font-bold">Sniply</span>
             </div>
             <p className="text-gray-600 max-w-xs">
               The AI-powered video editor designed for creating engaging short-form content for social media.
@@ -50,7 +50,7 @@ const Footer = () => {
         
         <div className="border-t border-gray-200 pt-8 flex flex-col md:flex-row justify-between items-center">
           <p className="text-sm text-gray-500 mb-4 md:mb-0">
-            © {new Date().getFullYear()} Clipora. All rights reserved.
+            © {new Date().getFullYear()} Sniply. All rights reserved.
           </p>
           
           <div className="flex space-x-6">
