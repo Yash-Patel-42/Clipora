@@ -4,6 +4,7 @@ import sys
 import time
 import urllib.request
 import zipfile
+import shutil
 
 def get_ffmpeg_path():
     ffmpeg_path = shutil.which("ffmpeg")
