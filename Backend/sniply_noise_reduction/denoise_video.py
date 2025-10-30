@@ -5,7 +5,16 @@ import time
 import urllib.request
 import zipfile
 
-FFMPEG_PATH = r"C:\ffmpeg\bin\ffmpeg.exe"
+def get_ffmpeg_path():
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        return ffmpeg_path
+    if platform.system() == "Windows":
+        return r"C:\ffmpeg\bin\ffmpeg.exe"
+
+    raise FileNotFoundError("FFmpeg not found. Please install ffmpeg or add to PATH.")
+
+FFMPEG_PATH = get_ffmpeg_path()
 
 
 def ensure_rnnoise_model():
