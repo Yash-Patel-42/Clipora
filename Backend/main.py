@@ -106,6 +106,7 @@ def process_bg_remover_icon(input_path, output_path):
 
 @app.post("/process/{processor_name}")
 async def process_video(
+    request: Request,
     processor_name: str,
     file: UploadFile = File(...),
     text: str = Form(None),
