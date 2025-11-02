@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -159,7 +159,17 @@ async def process_video(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
-    return FileResponse(output_path, media_type=media_type, filename=output_filename)
+    response = FileResponse(
+        output_path, media_type=media_type, filename=output_filename
+    )
+    origin = request.headers.get("origin")
+    if origin in [
+        "https://clipora-nine.vercel.app",
+        "http://localhost:5173",
+    ]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 @app.get("/processors")
